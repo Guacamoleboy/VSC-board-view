@@ -9,9 +9,12 @@ import { clearAuthToken, initializeAuth, setAuthToken } from "@/services/auth";
 import { initializeStorage } from "@/services/storage";
 import { initializeTodoDecorator } from "@/services/todo-decorator";
 import { registerTodoSidebar } from "@/ui/sidebar";
+import { scanTodosBackground } from "@/commands/scan-todos-background";
+import { spawnStructuredComment, DEFAULT_STATUS_MAP } from "@/utils/status";
+import debounce from "lodash.debounce";
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Congratulations, your extension "todo-board" is now active!');
+  console.log('TODO Board extension activated');
 
   // Initialize storage service
   initializeStorage(context);
@@ -21,6 +24,178 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Initialize TODO comment highlighting
   initializeTodoDecorator(context);
+
+  const debouncedBackgroundScan = debounce((doc: vscode.TextDocument) => {
+    scanTodosBackground(doc);
+  }, 300);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      debouncedBackgroundScan(doc);
+    })
+  );
+
+  const selectStatusCmd = vscode.commands.registerCommand(
+    "todo-board.selectStatus",
+    async (lineNum: number) => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return;
+
+      const statuses = ["idea", "to be done", "in progress", "in review", "done"];
+      const selection = await vscode.window.showQuickPick(statuses, {
+        placeHolder: "Choose status",
+      });
+
+      if (selection) {
+        await editor.edit((editBuilder) => {
+          const line = editor.document.lineAt(lineNum);
+          const updatedText = line.text.replace(
+            /^(\s*\/\/.*?\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/,
+            `$1(${selection})`
+          );
+          editBuilder.replace(line.range, updatedText);
+        });
+      }
+    }
+  );
+
+  const selectBadgesCmd = vscode.commands.registerCommand(
+    "todo-board.selectBadges",
+    async (lineNum: number) => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return;
+
+      const line = editor.document.lineAt(lineNum);
+      const text = line.text;
+      const badgeMatch = text.match(/\[(.*?)\]/);
+      const currentBadges = badgeMatch 
+        ? badgeMatch[1].split(',').map(s => s.trim()).filter(s => s !== "") 
+        : [];
+
+      const availableLabels = [
+        "High Priority", "WIP","Ready for Review", "Staged", "Deprecated", "Low Priority", "Urgent", "API",
+        "Frontend", ".CSS" , ".HTML",".TSX", ".TS", "Backend", "Database", "API", "UI/UX", "Security",
+        "Quick Fix", "Major Change", "BUG", "Research Needed",
+        "Documentation missing", "Draft", "Feature", "Refactor needed", "fixme", "wontfix", "Unit Test", "Temporary Hack"
+      ];
+      
+      const quickPickItems = availableLabels.map(label => ({
+        label,
+        picked: currentBadges.includes(label) 
+      }));
+
+      const quickPick = vscode.window.createQuickPick();
+      quickPick.items = quickPickItems;
+      quickPick.selectedItems = quickPickItems.filter(item => item.picked); 
+      quickPick.canSelectMany = true;
+      quickPick.placeholder = "Choose badges";
+
+      quickPick.onDidChangeSelection(async (selection) => {
+        const badgesString = selection.map(s => s.label).join(", ");
+        
+        await editor.edit((editBuilder) => {
+          const currentLine = editor.document.lineAt(lineNum);
+          const updatedText = currentLine.text.replace(/\[.*?\]/, `[${badgesString}]`);
+          editBuilder.replace(currentLine.range, updatedText);
+        }, { undoStopBefore: false, undoStopAfter: false });
+      });
+
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+    }
+
+  );
+
+  const selectPriorityCmd = vscode.commands.registerCommand(
+    "todo-board.selectPriority",
+    async (lineNum: number) => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return;
+
+      const priorities = ["Low", "Medium", "High", "Urgent", "Critical"];
+      const selection = await vscode.window.showQuickPick(priorities, {
+        placeHolder: "Set task priority",
+      });
+
+      if (selection) {
+        await editor.edit((editBuilder) => {
+          const line = editor.document.lineAt(lineNum);
+          const updatedText = line.text.replace(
+            /^(\s*\/\/.*?\([^)]*\)\s*\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/,
+            `$1(${selection})`
+          );
+          editBuilder.replace(line.range, updatedText);
+        });
+      }
+    }
+  );
+
+  const codeLensProvider = vscode.languages.registerCodeLensProvider({ scheme: 'file' }, {
+    provideCodeLenses(document) {
+      const lenses: vscode.CodeLens[] = [];
+      const tags = Object.keys(DEFAULT_STATUS_MAP);
+
+      for (let i = 0; i < document.lineCount; i++) {
+        const line = document.lineAt(i);
+        if (tags.some(tag => line.text.includes(tag)) && line.text.includes('(')) {
+          const range = new vscode.Range(i, 0, i, 0);
+          
+          lenses.push(new vscode.CodeLens(range, {
+            title: "$(list-selection)  Set status",
+            command: "todo-board.selectStatus",
+            arguments: [i]
+          }));
+
+          lenses.push(new vscode.CodeLens(range, {
+            title: "$(graph)  Set Priority",
+            command: "todo-board.selectPriority",
+            arguments: [i]
+          }));
+
+          lenses.push(new vscode.CodeLens(range, {
+            title: "$(tag)  Choose badges",
+            command: "todo-board.selectBadges",
+            arguments: [i]
+          }));
+        }
+      }
+      return lenses;
+    }
+  });
+
+  // () () () [] spawner
+  const structuredCommentListener = vscode.workspace.onDidChangeTextDocument(event => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || event.contentChanges.length === 0) return;
+
+    const change = event.contentChanges[0];
+    
+    if (change.text === "" && change.rangeLength > 0) {
+      return;
+    }
+
+    const lineNum = change.range.start.line;
+    const line = editor.document.lineAt(lineNum);
+    const text = line.text;
+    const tags = Object.keys(DEFAULT_STATUS_MAP);
+    const match = tags.find(tag => {
+      const regex = new RegExp(`\\b${tag}$`); 
+      return regex.test(text.trim());
+    });
+
+    if (match) {
+      const tagIndex = line.text.lastIndexOf(match);
+      const rangeToReplace = new vscode.Range(
+        lineNum, tagIndex, 
+        lineNum, tagIndex + match.length
+      );
+
+      editor.edit(editBuilder => {
+        editBuilder.replace(rangeToReplace, spawnStructuredComment(match));
+      }, { undoStopBefore: false, undoStopAfter: false });
+    }
+
+  });
 
   const scanCmd = vscode.commands.registerCommand(
     "todo-board.scanTodos",
@@ -152,6 +327,11 @@ export function activate(context: vscode.ExtensionContext) {
     sidebarView,
     authenticateCmd,
     uriHandlerDisposable,
+    structuredCommentListener,
+    codeLensProvider,
+    selectStatusCmd,
+    selectBadgesCmd,
+    selectPriorityCmd,
   );
 }
 

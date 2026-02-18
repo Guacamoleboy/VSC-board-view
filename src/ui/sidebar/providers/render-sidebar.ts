@@ -112,7 +112,7 @@ export class TodoSidebarProvider implements vscode.WebviewViewProvider {
               </button>
               <button class="btn btn--secondary" id="scanTodosBtn" data-action="scanTodos">
                 ${iconsSvg.scanFiles}
-                <span>Scan Workspace</span>
+                <span>Manual Task Scan</span>
               </button>
             </div>
 

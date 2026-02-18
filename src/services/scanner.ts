@@ -22,6 +22,7 @@ import type { ScanResult, TodoHit } from "@/types/todo";
 export async function scanWorkspace(
   progress?: vscode.Progress<{ message?: string; increment?: number }>,
   token?: vscode.CancellationToken,
+  doc?: vscode.TextDocument,
 ): Promise<ScanResult> {
   const hits: TodoHit[] = [];
   let reused = 0;
@@ -30,15 +31,13 @@ export async function scanWorkspace(
   const pattern = getTodoPattern();
   const searchPatterns = getSearchPatterns();
   const maxLines = getMaxTodoLines();
-
   const include = getIncludeGlob();
   const exclude = getExcludeGlob();
-  const uris = await vscode.workspace.findFiles(include, exclude, 12000);
-
+  const uris = doc 
+    ? [doc.uri]
+    : await vscode.workspace.findFiles(include, exclude, 12000);
   const cache: CacheData = await readCache();
-
   const updated: string[] = [];
-
   const concurrency = 25;
   let cursor = 0;
 
@@ -208,27 +207,22 @@ export async function enrichTodosWithGitInfo(
   hits: TodoHit[],
 ): Promise<TodoHit[]> {
   const enrichedHits: TodoHit[] = [];
-
-  // Process in batches to avoid overwhelming the system
   const batchSize = 10;
+
   for (let i = 0; i < hits.length; i += batchSize) {
     const batch = hits.slice(i, i + batchSize);
     const enrichedBatch = await Promise.all(
       batch.map(async (hit) => {
-        const gitInfo = await getLineInfo(hit.file, hit.line + 1); // Git uses 1-based line numbers
-
-        if (gitInfo) {
-          return {
-            ...hit,
-            lastModified: gitInfo.date,
-            daysOld: gitInfo.daysOld,
-          };
+        try {
+          const gitInfo = await getLineInfo(hit.file, hit.line + 1);
+          return gitInfo
+            ? { ...hit, lastModified: gitInfo.date, daysOld: gitInfo.daysOld }
+            : hit;
+        } catch {
+          return hit;
         }
-
-        return hit;
       }),
     );
-
     enrichedHits.push(...enrichedBatch);
   }
 

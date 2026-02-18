@@ -51,6 +51,10 @@ export function getSidebarStyles(): string {
       transform: translateY(0);
     }
 
+    .btn--primary, .btn--secondary {
+      box-shadow: 0 4px 1px rgba(0,0,0,0.4);
+    }
+
     .btn--primary {
       background-color: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
@@ -58,6 +62,8 @@ export function getSidebarStyles(): string {
 
     .btn--primary:hover {
       background-color: var(--vscode-button-hoverBackground);
+      box-shadow: 0 6px 1px rgba(0,0,0,0.5);
+      transform: transformY(2px);
     }
 
     .btn--secondary {
@@ -67,6 +73,8 @@ export function getSidebarStyles(): string {
 
     .btn--secondary:hover {
       background-color: var(--vscode-button-secondaryHoverBackground);
+      box-shadow: 0 6px 1px rgba(0,0,0,0.5);
+      transform: transformY(2px);
     }
 
     .btn svg {
@@ -157,6 +165,7 @@ export function getSidebarStyles(): string {
       cursor: pointer;
       transition: all 120ms ease;
       border: 2px solid transparent;
+      color: #e2e2e2;
     }
 
     .label-item:hover {

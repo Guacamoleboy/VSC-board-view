@@ -1,61 +1,83 @@
 import * as vscode from "vscode";
 
 import { getMaxTodoLines, getSearchPatterns, getTodoPattern } from "@/config";
-import type { TodoPriority } from "@/types/todo";
+import type { TodoStatus } from "@/types/todo";
 
-/**
- * TODO Comment Decorator
- *
- * Highlights TODO comments in the editor based on priority:
- * - High priority: Red background
- * - Medium priority: Orange background
- * - Low/No priority: Blue background
- */
+// Color Scheme
+const tagColors: Record<string, string> = {
+  bug: "#DC2626",
+  fixme: "#F43F5E",
+  refactor: "#6366F1",
+  security: "#EC4899",
+  reviewed: "#10B981",
+  reviewrequest: "#F59E0B",
+  temp: "#F97316",
+  optimize: "#8B5CF6",
+  issue: "#DC2626",
+  task: "#14B8A6",
+  doc: "#FBBF24",
+  test: "#06B6D4",
+  link: "#3B82F6",
+  hack: "#EF4444",
+  deprecated: "#9CA3AF",
+  kanban: "#e6bd08;",
+};
+
+const extraDecorationType = vscode.window.createTextEditorDecorationType({
+  color: "#FFFFFF",
+});
+
+function extractLabelsFromLine(line: string): string[] {
+  const match = line.match(/(TODO|BUG|FIXME|REFRACTOR|SECURITY|REVIEWED|REVIEWREQUEST|TEMP|OPTIMIZE|ISSUE|TASK|DOC|TEST|LINK|HACK|DEPRECATED|KANBAN)/i);
+  return match ? [match[0]] : [];
+}
+
+// Create TextEditorDecorationTypes for each tag
+export const tagDecorationTypes: Record<string, vscode.TextEditorDecorationType> = {};
+  for (const key in tagColors) {
+    tagDecorationTypes[key] = vscode.window.createTextEditorDecorationType({
+      color: tagColors[key],
+      overviewRulerColor: tagColors[key],
+      overviewRulerLane: vscode.OverviewRulerLane.Right,
+    });
+}
 
 let highPriorityDecorationType: vscode.TextEditorDecorationType;
 let mediumPriorityDecorationType: vscode.TextEditorDecorationType;
 let lowPriorityDecorationType: vscode.TextEditorDecorationType;
-
+let defaultPriorityDecorationType: vscode.TextEditorDecorationType;
 let isEnabled = true;
 
-/**
- * Initialize decoration types with colors from settings
- */
+// Editor colors triggerig on known // XX.
 function createDecorationTypes(): void {
-  const config = vscode.workspace.getConfiguration("todo-board");
-
-  const highColor = config.get<string>(
-    "highlight.highPriorityColor",
-    "#e74c3c",
-  );
-  const mediumColor = config.get<string>(
-    "highlight.mediumPriorityColor",
-    "#ffa94d",
-  );
-  const lowColor = config.get<string>("highlight.lowPriorityColor", "#4dabf7");
-
   highPriorityDecorationType = vscode.window.createTextEditorDecorationType({
-    color: highColor,
-    overviewRulerColor: highColor,
+    color: "#e74c3c",
+    overviewRulerColor: "#e74c3c",
     overviewRulerLane: vscode.OverviewRulerLane.Right,
   });
 
   mediumPriorityDecorationType = vscode.window.createTextEditorDecorationType({
-    color: mediumColor,
-    overviewRulerColor: mediumColor,
+    color: "#ffa94d", 
+    overviewRulerColor: "#ffa94d",
     overviewRulerLane: vscode.OverviewRulerLane.Right,
   });
 
   lowPriorityDecorationType = vscode.window.createTextEditorDecorationType({
-    color: lowColor,
-    overviewRulerColor: lowColor,
+    color: "#4dabf7", 
+    overviewRulerColor: "#4dabf7",
     overviewRulerLane: vscode.OverviewRulerLane.Right,
   });
+
+  // Default
+  defaultPriorityDecorationType = vscode.window.createTextEditorDecorationType({
+    color: "#69f74d",
+    overviewRulerColor: "#69f74d",
+    overviewRulerLane: vscode.OverviewRulerLane.Right,
+  });
+
 }
 
-/**
- * Check if a line is a comment
- */
+
 function isCommentLine(line: string): boolean {
   const trimmed = line.trimStart();
   return (
@@ -67,269 +89,164 @@ function isCommentLine(line: string): boolean {
   );
 }
 
-/**
- * Check if TODO pattern appears at the start of a comment (not in the middle of text)
- */
 function isTodoInComment(lineText: string, patterns: string[]): boolean {
   const trimmed = lineText.trimStart();
+  if (!isCommentLine(lineText)) return false;
 
-  // Check if line is a comment
-  if (!isCommentLine(lineText)) {
-    return false;
-  }
-
-  // Remove comment markers to get the actual comment content
   let commentContent = trimmed;
+  if (commentContent.startsWith("//")) commentContent = commentContent.substring(2).trimStart();
+  else if (commentContent.startsWith("#")) commentContent = commentContent.substring(1).trimStart();
+  else if (commentContent.startsWith("<!--")) commentContent = commentContent.substring(4).trimStart();
+  else if (commentContent.startsWith("/*")) commentContent = commentContent.replace(/^\/\*+\s*/, "");
+  else if (commentContent.startsWith("*")) commentContent = commentContent.replace(/^\*+\s*/, "");
 
-  // Remove line comment markers: //, #
-  if (commentContent.startsWith("//")) {
-    commentContent = commentContent.substring(2).trimStart();
-  } else if (commentContent.startsWith("#")) {
-    commentContent = commentContent.substring(1).trimStart();
-  }
-  // Remove block comment markers: /*, /***, <!--
-  else if (commentContent.startsWith("<!--")) {
-    commentContent = commentContent.substring(4).trimStart();
-  } else if (commentContent.startsWith("/*")) {
-    // Remove leading asterisks (/* or /** or /***)
-    commentContent = commentContent.replace(/^\/\*+\s*/, "");
-  }
-  // Remove leading asterisks from block comment continuation lines
-  else if (commentContent.startsWith("*")) {
-    commentContent = commentContent.replace(/^\*+\s*/, "");
-  }
-
-  // Check if any pattern appears at the start of the comment content
-  return patterns.some((pattern) =>
-    commentContent.toUpperCase().startsWith(pattern.toUpperCase()),
+  return patterns.some(pattern =>
+    commentContent.toUpperCase().startsWith(pattern.toUpperCase())
   );
+
 }
 
-/**
- * Decorate TODO comments in the active editor
- */
+// Editor decoration
 function decorateTodos(editor: vscode.TextEditor | undefined): void {
-  if (!editor || !isEnabled) {
-    return;
-  }
+  if (!editor || !isEnabled) return;
 
-  const document = editor.document;
-  const text = document.getText();
-
+  const text = editor.document.getText();
   const highPriorityRanges: vscode.Range[] = [];
   const mediumPriorityRanges: vscode.Range[] = [];
   const lowPriorityRanges: vscode.Range[] = [];
-
+  const defaultPriorityRanges: vscode.Range[] = [];
+  const extraDecorationRanges: vscode.Range[] = [];
   const patterns = getSearchPatterns();
   const todoPattern = getTodoPattern();
   const maxLines = getMaxTodoLines();
-
-  // Scan each line for TODO patterns
   const lines = text.split("\n");
+
+  for (const key in tagDecorationTypes) editor.setDecorations(tagDecorationTypes[key], []);
+  editor.setDecorations(extraDecorationType, []);
+  editor.setDecorations(highPriorityDecorationType, []);
+  editor.setDecorations(mediumPriorityDecorationType, []);
+  editor.setDecorations(lowPriorityDecorationType, []);
+  editor.setDecorations(defaultPriorityDecorationType, []);
+
+  const tagRanges: Record<string, vscode.Range[]> = {};
+  for (const key in tagColors) tagRanges[key] = [];
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const lineText = lines[lineIndex];
-    const match = todoPattern.exec(lineText);
+    if (!todoPattern.test(lineText)) continue;
+    if (!isTodoInComment(lineText, patterns)) continue;
 
-    if (!match) {
-      continue;
-    }
+    const lineLabels = extractLabelsFromLine(lineText);
+    if (!lineLabels || lineLabels.length === 0) continue;
 
-    // Check if TODO pattern is actually in a comment
-    if (!isTodoInComment(lineText, patterns)) {
-      continue;
-    }
-
-    // Extract priority from parentheses like (high), (medium), (low)
-    // Works with any configured pattern: @TODO(high), TODO(medium), FIXME(low), etc.
     const priorityMatch = lineText.match(/\((\w+)\)/);
-    let priority: TodoPriority = "low";
+    const token = priorityMatch?.[1]?.toLowerCase() ?? "default";
 
-    if (priorityMatch?.[1]) {
-      const token = priorityMatch[1].toLowerCase();
-      if (token === "high") {
-        priority = "high";
-      } else if (token === "medium") {
-        priority = "medium";
-      } else {
-        priority = "low";
-      }
-    }
-
-    // Find the start of the comment block
     const trimmedLine = lineText.trimStart();
     const leadingWhitespace = lineText.length - trimmedLine.length;
-
-    // Check if we're inside a block comment (line starts with * but not /*)
     let startLineIndex = lineIndex;
     let commentStart = leadingWhitespace;
 
-    if (trimmedLine.startsWith("*") && !trimmedLine.startsWith("/*")) {
-      // Look backwards for the opening /*
-      for (let i = lineIndex - 1; i >= 0; i--) {
-        const prevLine = lines[i];
-        const prevTrimmed = prevLine.trimStart();
-
-        if (prevTrimmed.startsWith("/*")) {
-          startLineIndex = i;
-          commentStart = prevLine.length - prevTrimmed.length;
-          break;
-        }
-
-        // Stop if we hit a line that doesn't look like a comment
-        if (!prevTrimmed.startsWith("*") && !prevTrimmed.startsWith("/*")) {
-          break;
-        }
-      }
-    } else if (
-      trimmedLine.startsWith("//") ||
-      trimmedLine.startsWith("/*") ||
-      trimmedLine.startsWith("#") ||
-      trimmedLine.startsWith("<!--")
-    ) {
-      // Already at the start of the comment
-      commentStart = leadingWhitespace;
-    } else {
-      // Fallback to TODO position
-      commentStart = lineText.indexOf(match[0]);
-    }
-
-    // Check for continuation lines (lines that follow and start with comment markers)
     let endLineIndex = lineIndex;
-    const maxEndLine = Math.min(
-      startLineIndex + maxLines - 1,
-      lines.length - 1,
-    );
-
+    const maxEndLine = Math.min(startLineIndex + maxLines - 1, lines.length - 1);
     for (let i = lineIndex + 1; i <= maxEndLine; i++) {
-      const nextLine = lines[i];
-      const nextTrimmed = nextLine.trimStart();
-
-      // Check if next line is a continuation (comment without TODO pattern)
+      const nextLine = lines[i].trimStart();
       const isContinuation =
-        (nextTrimmed.startsWith("//") ||
-          nextTrimmed.startsWith("*") ||
-          nextTrimmed.startsWith("#")) &&
-        !todoPattern.test(nextLine);
-
-      if (isContinuation) {
-        endLineIndex = i;
-      } else {
-        break;
-      }
+        (nextLine.startsWith("//") ||
+         nextLine.startsWith("*") ||
+         nextLine.startsWith("#") ||
+         nextLine.startsWith("<!--")) &&
+        !todoPattern.test(lines[i]);
+      if (isContinuation) endLineIndex = i;
+      else break;
     }
 
-    const range = new vscode.Range(
+    const fullRange = new vscode.Range(
       new vscode.Position(startLineIndex, commentStart),
-      new vscode.Position(endLineIndex, lines[endLineIndex]?.length ?? 0),
+      new vscode.Position(endLineIndex, lines[endLineIndex]?.length ?? 0)
     );
 
-    switch (priority) {
-      case "high":
-        highPriorityRanges.push(range);
-        break;
-      case "medium":
-        mediumPriorityRanges.push(range);
-        break;
-      default:
-        lowPriorityRanges.push(range);
-        break;
+    const extraRegex = /(\([^)]*\)|\[[^\]]*\])/g; 
+    let matchExtra: RegExpExecArray | null;
+    while ((matchExtra = extraRegex.exec(lineText))) {
+      const startPos = new vscode.Position(lineIndex, matchExtra.index);
+      const endPos = new vscode.Position(lineIndex, matchExtra.index + matchExtra[0].length);
+      extraDecorationRanges.push(new vscode.Range(startPos, endPos));
+    }
+
+    for (const label of lineLabels) {
+      const lower = label.replace(/^@/, "").toLowerCase();
+      if (lower === "todo") {
+        switch (token) {
+          case "high": highPriorityRanges.push(fullRange); break;
+          case "medium": mediumPriorityRanges.push(fullRange); break;
+          case "low": lowPriorityRanges.push(fullRange); break;
+          default: defaultPriorityRanges.push(fullRange); break;
+        }
+      } else if (tagDecorationTypes[lower]) {
+        tagRanges[lower].push(fullRange);
+      } else {
+        defaultPriorityRanges.push(fullRange);
+      }
     }
   }
 
+  for (const key in tagRanges) editor.setDecorations(tagDecorationTypes[key], tagRanges[key]);
   editor.setDecorations(highPriorityDecorationType, highPriorityRanges);
   editor.setDecorations(mediumPriorityDecorationType, mediumPriorityRanges);
   editor.setDecorations(lowPriorityDecorationType, lowPriorityRanges);
+  editor.setDecorations(defaultPriorityDecorationType, defaultPriorityRanges);
+  editor.setDecorations(extraDecorationType, extraDecorationRanges);
+
 }
 
-/**
- * Initialize the decorator
- */
-export function initializeTodoDecorator(
-  context: vscode.ExtensionContext,
-): void {
+export function initializeTodoDecorator(context: vscode.ExtensionContext): void {
+  
   const config = vscode.workspace.getConfiguration("todo-board");
   isEnabled = config.get<boolean>("highlight.enabled", true);
-
-  if (!isEnabled) {
-    return;
-  }
+  if (!isEnabled) return;
 
   createDecorationTypes();
 
-  // Decorate active editor on startup
-  if (vscode.window.activeTextEditor) {
-    decorateTodos(vscode.window.activeTextEditor);
-  }
+  if (vscode.window.activeTextEditor) decorateTodos(vscode.window.activeTextEditor);
 
-  // Update decorations when active editor changes
   context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      decorateTodos(editor);
-    }),
-  );
-
-  // Update decorations when document changes
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      if (
-        vscode.window.activeTextEditor &&
-        event.document === vscode.window.activeTextEditor.document
-      ) {
+    vscode.window.onDidChangeActiveTextEditor(editor => decorateTodos(editor)),
+    vscode.workspace.onDidChangeTextDocument(event => {
+      if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
         decorateTodos(vscode.window.activeTextEditor);
       }
     }),
-  );
-
-  // Recreate decorations when configuration changes
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((event) => {
+    vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration("todo-board.highlight")) {
         const newConfig = vscode.workspace.getConfiguration("todo-board");
         const newEnabled = newConfig.get<boolean>("highlight.enabled", true);
 
         if (newEnabled !== isEnabled) {
           isEnabled = newEnabled;
-
-          if (!isEnabled) {
-            // Clear all decorations
-            if (vscode.window.activeTextEditor) {
-              vscode.window.activeTextEditor.setDecorations(
-                highPriorityDecorationType,
-                [],
-              );
-              vscode.window.activeTextEditor.setDecorations(
-                mediumPriorityDecorationType,
-                [],
-              );
-              vscode.window.activeTextEditor.setDecorations(
-                lowPriorityDecorationType,
-                [],
-              );
-            }
+          if (!isEnabled && vscode.window.activeTextEditor) {
+            vscode.window.activeTextEditor.setDecorations(highPriorityDecorationType, []);
+            vscode.window.activeTextEditor.setDecorations(mediumPriorityDecorationType, []);
+            vscode.window.activeTextEditor.setDecorations(lowPriorityDecorationType, []);
+            vscode.window.activeTextEditor.setDecorations(defaultPriorityDecorationType, []);
           }
         }
 
         if (isEnabled) {
-          // Recreate decoration types with new colors
           disposeTodoDecorator();
-
           createDecorationTypes();
-
-          if (vscode.window.activeTextEditor) {
-            decorateTodos(vscode.window.activeTextEditor);
-          }
+          if (vscode.window.activeTextEditor) decorateTodos(vscode.window.activeTextEditor);
         }
       }
-    }),
+    })
   );
-}
 
-/**
- * Dispose decorations
- */
+}
+ 
+// Dispose decorations
 function disposeTodoDecorator(): void {
   highPriorityDecorationType?.dispose();
   mediumPriorityDecorationType?.dispose();
   lowPriorityDecorationType?.dispose();
+  defaultPriorityDecorationType?.dispose();
 }

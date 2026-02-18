@@ -67,6 +67,18 @@
       {
         "command": "todo-board.logout",
         "title": "TODO Board: Logout from Jira"
+      },
+      {
+      "command": "todo-board.selectStatus",
+      "title": "Select TODO Status"
+      },
+      {
+      "command": "todo-board.selectPriority",
+      "title": "Select TODO Priority"
+      },
+      {
+      "command": "todo-board.selectBadges",
+      "title": "Select TODO Badges"
       }
     ],
     "viewsContainers": {
@@ -161,7 +173,37 @@
           },
           "default": [
             "TODO",
-            "@TODO"
+            "@TODO",
+            "REFACTOR",
+            "@REFACTOR",
+            "SECURITY",
+            "@SECURITY",
+            "FIXME",
+            "@FIXME",
+            "BUG",
+            "@BUG",
+            "REVIEWED",
+            "@REVIEWED",
+            "REVIEWREQUEST",
+            "@REVIEWREQUEST",
+            "@TEMP",
+            "@OPTIMIZE",
+            "ISSUE",
+            "@ISSUE",
+            "TASK",
+            "@TASK",
+            "DOC",
+            "@DOC",
+            "TEST",
+            "LINK",
+            "@LINK",
+            "@TEST",
+            "HACK",
+            "@HACK",
+            "DEPRECATED",
+            "@DEPRECATED",
+            "KANBAN",
+            "@KANBAN"
           ],
           "description": "Padrões de busca para TODOs (case sensitive). Exemplos: '@TODO', 'TODO', '@FIXME', 'FIXME', 'BUG'. Não inclua parênteses ou caracteres especiais de regex."
         },
@@ -169,21 +211,6 @@
           "type": "boolean",
           "default": true,
           "description": "Ativar destaque visual de comentários TODO no editor"
-        },
-        "todo-board.highlight.highPriorityColor": {
-          "type": "string",
-          "default": "#e74c3c",
-          "description": "Cor para TODOs de alta prioridade (@TODO(high))"
-        },
-        "todo-board.highlight.mediumPriorityColor": {
-          "type": "string",
-          "default": "#ffa94d",
-          "description": "Cor para TODOs de média prioridade (@TODO(medium))"
-        },
-        "todo-board.highlight.lowPriorityColor": {
-          "type": "string",
-          "default": "#4dabf7",
-          "description": "Cor para TODOs de baixa prioridade ou sem prioridade (@TODO(low) ou @TODO)"
         }
       }
     }
@@ -200,10 +227,12 @@
     "format:check": "biome format ."
   },
   "dependencies": {
+    "lodash.debounce": "^4.0.8",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.6",
+    "@types/lodash.debounce": "^4.0.9",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.103.0",

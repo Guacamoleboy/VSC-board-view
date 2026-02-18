@@ -13,6 +13,11 @@ export function getBoardStyles(): string {
       color: var(--vscode-foreground);
     }
 
+    body.hide-locations .card__meta,
+    body.hide-locations .badge--location {
+        display: none !important;
+    }
+
     body * {
       box-sizing: border-box;
     }
@@ -319,20 +324,78 @@ export function getBoardStyles(): string {
 
     .card {
       border-radius: 6px;
-      border: 1px solid transparent;
-      padding: 12px;
+      border: 2px solid rgba(255,255,255,0.15);
+      padding: 1rem;
       background: var(--vscode-editorWidget-background);
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 5px 1px rgba(0, 0, 0, 0.3);
       cursor: pointer;
-      transition: border-color 120ms ease, transform 120ms ease;
+      transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
       display: flex;
       flex-direction: column;
       word-break: break-word;
       overflow-wrap: break-word;
+      transform: translateY(0);
+    }
+
+    .card:hover {
+        transform: translateY(2px); 
+        box-shadow: 0 3px 1px rgba(0, 0, 0, 0.5); 
+        border-color: rgba(255,255,255,0.3); 
+    }
+
+    .card__labels {
+      margin-top: 0.5rem !important;
     }
 
     .card.hidden {
       display: none;
+    }
+
+    .card__header__alignment {
+        display: flex;
+        justify-content: space-between; 
+        align-items: center;         
+        width: 100%;                  
+        gap: 12px;                    
+        margin-bottom: 4px;           
+    }
+
+    .card__priority-badge {
+        font-size: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: var(--vscode-badge-background); 
+        color: var(--vscode-badge-foreground);
+        white-space: nowrap;           
+    }
+
+    .card__priority-badge[data-priority="high"] {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
+    .card__priority-badge[data-priority="medium"] {
+      background: #f59e0b; 
+      color: #000000;
+    }
+
+    .card__priority-badge[data-priority="low"] {
+      background: #1c753e; 
+      color: #bbf7d0;      
+    }
+
+    .card__priority-badge[data-priority="critical"] {
+      background: #450a0a; 
+      color: #fca5a5;     
+      border: 1px solid #991b1b;
+    }
+
+    .card__priority-badge[data-priority="urgent"] {
+      background: #dc2626; 
+      color: #ffffff;      
+      border: 1px solid #fecaca;
     }
 
     .card__header {
@@ -362,11 +425,21 @@ export function getBoardStyles(): string {
     }
 
     .card__description {
-      font-size: 14px;
-      font-weight: 500;
-      margin: 0 0 8px;
+      position: relative;
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0.25 0.5rem;
       white-space: pre-wrap;
       word-break: break-word;
+    }
+
+    .card__description::after {
+      content: "";
+      display: block;         
+      width: 20%;           
+      height: 2px;           
+      background-color: rgba(255,255,255,0.75); 
+      margin-top: 0.5rem !important;    
     }
 
     .card__meta {
@@ -389,23 +462,22 @@ export function getBoardStyles(): string {
     .card__labels .badge {
       margin-top: 4px;
       padding: 4px 10px;
-      border-radius: 12px;
+      border-radius: 1rem;
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.3px;
       text-transform: uppercase;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 4px 1px rgba(0, 0, 0, 0.3);
     }
 
     .badge--clickable {
       cursor: pointer;
-      border: 1px solid transparent;
       transition: opacity 120ms ease, transform 120ms ease;
     }
 
     .badge--clickable:hover {
-      opacity: 0.85;
-      transform: scale(1.05);
+      opacity: 0.9;
+      transform: scale(1.025);
     }
 
     .badge--clickable:active {
@@ -459,6 +531,18 @@ export function getBoardStyles(): string {
 
     .age-abandoned {
       border: 1px solid #ef4444;
+    }
+
+    .badge--location {
+      text-decoration: none !important;
+      margin-bottom: 0.25rem !important;
+      background-color: #eec50d;
+      color: #2b2b2b;
+      padding: 0.22rem 0.6rem;
+      border-radius: 0.22rem;   
+      font-size: 0.82rem;        
+      font-weight: 500;
+      box-shadow: 0 2.5px 1px rgba(211, 168, 26, 0.55); 
     }
 
     .empty {
@@ -693,5 +777,31 @@ export function getBoardStyles(): string {
     .button--secondary:hover {
       background: var(--vscode-button-secondaryHoverBackground);
     }
+
+    .toggle-location-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      margin-right: 8px; /* Afstand til søgefeltet */
+      transition: all 0.2s ease;
+    }
+
+    .toggle-location-button:hover {
+      background-color: var(--vscode-toolbar-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+    }
+
+    .toggle-location-button.active {
+      color: var(--vscode-button-background);
+      background-color: var(--vscode-button-secondaryHoverBackground);
+    }
+
   `;
 }

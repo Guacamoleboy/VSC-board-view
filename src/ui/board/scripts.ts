@@ -1,3 +1,5 @@
+import { iconsSvg } from "@/ui/icons";
+
 export function getBoardScripts(): string {
   return `
     const vscode = acquireVsCodeApi();
@@ -22,6 +24,9 @@ export function getBoardScripts(): string {
     const issueSummaryInput = document.getElementById('issueSummary');
     const issueDescriptionInput = document.getElementById('issueDescription');
     const issueLocationInput = document.getElementById('issueLocation');
+    const toggleLocationBtn = document.getElementById('toggleLocationButton');
+    const locationIcon = \`${iconsSvg.location}\`;
+    const locationOffIcon = \`${iconsSvg.locationOff}\`;
 
     let activeLabels = []; // Array of active label filters
     let sortDirection = 'desc'; // Default: most recent first
@@ -42,6 +47,16 @@ export function getBoardScripts(): string {
         vscode.postMessage({ type: 'open', file, line });
       });
     });
+
+    // Location visibilty
+    if (toggleLocationBtn) {
+        toggleLocationBtn.addEventListener('click', () => {
+            const isHidden = document.body.classList.toggle('hide-locations');
+            // Skift mellem location og locationOff ikonerne
+            toggleLocationBtn.innerHTML = isHidden ? locationOffIcon : locationIcon;
+            toggleLocationBtn.title = isHidden ? "Show location" : "Hide location";
+        });
+    }
 
     // Kebab menu: abrir/fechar e ação de criar issue
     kebabMenus.forEach((menu) => {

@@ -1,11 +1,18 @@
 import type { CommonLabels } from "./label";
 
-export type TodoPriority = "low" | "medium" | "high";
+export type TodoStatus =
+  | "idea"
+  | "to be done"
+  | "in progress"
+  | "in review"
+  | "done";
 
 export interface BoardItem {
   id: string;
-  priority: TodoPriority;
+  status: TodoStatus;    
+  title: string;           
   description: string;
+  priority: string;
   filePath: string;
   relativePath: string;
   line: number;
@@ -18,9 +25,11 @@ export interface BoardItem {
 }
 
 export interface TodoGroups {
-  low: BoardItem[];
-  medium: BoardItem[];
-  high: BoardItem[];
+  idea: BoardItem[];
+  "to be done": BoardItem[];
+  "in progress": BoardItem[];
+  "in review": BoardItem[];
+  done: BoardItem[];
 }
 
 export interface TodoHit {

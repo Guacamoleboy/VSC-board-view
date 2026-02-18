@@ -5,9 +5,18 @@ export function getHeaderComponent(): string {
     <div class="header">
       <h1>
         ${iconsSvg.activityBar}
-        TODO Board
+        Kanban Task Board
       </h1>
       <div class="header-controls">
+
+        <button 
+          class="toggle-location-button" 
+          id="toggleLocationButton" 
+          title="Toggle file location visibility"
+        >
+          ${iconsSvg.location}
+        </button>
+
         <div class="search-container">
           <button
             class="reset-filters-button"
@@ -34,7 +43,7 @@ export function getHeaderComponent(): string {
               type="text"
               class="search-input"
               id="searchInput"
-              placeholder="Search TODOs..."
+              placeholder="Search..."
               autocomplete="off"
             />
             <button
@@ -56,11 +65,11 @@ export function getHeaderComponent(): string {
             id="ageFilterSelect"
             title="Filter by age"
           >
-            <option value="all">All ages</option>
-            <option value="fresh">Fresh (≤7 days)</option>
+            <option value="all">All</option>
+            <option value="fresh">New (≤7 days)</option>
             <option value="recent">Recent (≤30 days)</option>
             <option value="old">Old (≤90 days)</option>
-            <option value="abandoned">Abandoned (>90 days)</option>
+            <option value="abandoned">Ancient (>90 days)</option>
           </select>
         </div>
         <button

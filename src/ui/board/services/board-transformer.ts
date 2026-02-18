@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
 
 import { REGEX } from "@/constants/regex";
-import { parseTodoPriority } from "@/utils/priority";
-import type {
-  BoardItem,
-  TodoGroups,
-  TodoHit,
-  TodoPriority,
-} from "@/types/todo";
-
-const PRIORITY_LEVELS: TodoPriority[] = ["low", "medium", "high"];
+import { parseTodoStatus } from "@/utils/status";
+import type { BoardItem, TodoGroups, TodoHit, TodoStatus } from "@/types/todo";
+const STATUS_LEVELS: TodoStatus[] = [
+  "idea",
+  "to be done",
+  "in progress",
+  "in review",
+  "done",
+];
 
 export function buildBoardItems(hits: TodoHit[]): BoardItem[] {
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -22,7 +22,7 @@ export function buildBoardItems(hits: TodoHit[]): BoardItem[] {
 }
 
 function toBoardItem(hit: TodoHit, relativePath: string): BoardItem {
-  const { priority, description, labels } = parseTodoPriority(hit.text);
+  const { status, title, description, priority, labels } = parseTodoStatus(hit.text);
   const normalizedDescription = description.replace(
     REGEX.LINE_BREAK_REGEX,
     REGEX.LINE_BREAK_TOKEN,
@@ -30,7 +30,9 @@ function toBoardItem(hit: TodoHit, relativePath: string): BoardItem {
 
   return {
     id: hit.id,
-    priority,
+    status,
+    title,  
+    priority: priority || "Low",                           
     description: normalizedDescription,
     filePath: hit.file,
     relativePath,
@@ -42,6 +44,7 @@ function toBoardItem(hit: TodoHit, relativePath: string): BoardItem {
     issueKey: hit.issueKey,
     issueLink: hit.issueLink,
   };
+
 }
 
 function compareBoardItems(left: BoardItem, right: BoardItem): number {
@@ -53,23 +56,27 @@ function compareBoardItems(left: BoardItem, right: BoardItem): number {
     return left.line - right.line;
   }
 
-  return left.description.localeCompare(right.description);
+  return left.title.localeCompare(right.title);
 }
 
 export function groupItems(items: BoardItem[]): TodoGroups {
   const groups: TodoGroups = {
-    low: [],
-    medium: [],
-    high: [],
+    idea: [],
+    "to be done": [],
+    "in progress": [],
+    "in review": [],
+    done: [],
   };
 
   for (const item of items) {
-    groups[item.priority ?? "low"].push(item);
+    const s = item.status ?? "idea";
+    groups[s].push(item);
   }
 
-  for (const priority of PRIORITY_LEVELS) {
-    groups[priority].sort(compareBoardItems);
+  for (const status of STATUS_LEVELS) {
+    groups[status].sort(compareBoardItems);
   }
 
   return groups;
+
 }

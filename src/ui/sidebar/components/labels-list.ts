@@ -9,7 +9,7 @@ export function renderLabelsList(
     return `
       <div class="empty-state">
         ${iconsSvg.sparkle}
-        <p>No labels found yet.<br>Start adding labels to your TODOs!</p>
+        <p>No labels found yet.<br>Start adding labels to your KanBan Tasks!</p>
       </div>
     `;
   }
