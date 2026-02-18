@@ -1,34 +1,47 @@
-# Forked from dantewebmaster/todo-board under MIT License
+<div align="LEFT">
 
-## Visual KanBan Board for VSCode
+# Visual KanBan Board for VSCode
+**A fully visual KanBan board directly in your VSCode IDE.**  
 
-Visual KanBan Board directly in your VSCode IDE. Loads per repository / folder. 
+[![Visit VSCode Marketplace](https://img.shields.io/badge/VSCode%20Marketplace-ffffff?style=for-the-badge&color=007ACC)](https://marketplace.visualstudio.com/)
+[![Forked from Todo Board](https://img.shields.io/badge/Forked%20from%20dantewebmaster/todo--board-ffffff?style=for-the-badge&color=392580)](#)
 
-### Funktioner
+</div>
 
-- Github Style KanBan
-- // TODO, // KANBAN, // BUG directly in the IDE
-- Create, edit & keep track of tasks directly in your IDE
-- Upgraded UI
-- Background load when // KANBAN has been created. No need to manually update!
+---
 
-### Diffences from the For
+### Plugin Features
+- Github-style KanBan boards
+- Use `// TODO`, `// KANBAN`, `// BUG` directly in the IDE
+- Create, edit, and track tasks without leaving VSCode
+- Upgraded UI for smooth interactions
+- Background load when `// KANBAN` is created—no manual refresh needed
 
-- Massive upgrade to UI & UX
-- Background Load instead of having to manually press a button each time
-- A ton of new features including // KANBAN (title) (description) (status) (priority) [badge, badge]
-  where status, priority and badges can be selected from a dropdown directly in the editor instead of having to guess! Wow..
-- Better setup for triggering // tasks.
-- More efficient setup for labels, colors of labels etc.
-- Parsing of () () .. done correct and efficient directly in .ts
-- A KanBan board instead of Todo Board for // TODO only. This supports all the same features as a KanBan on Github.com
-- More colors.. More fun!
+---
 
-### Made for
+### Differences from the Original Fork
+- Completely redesigned UI & UX
+- Background loading instead of manual updates
+- Advanced task features: title, description, status, priority, badges with dropdown selection
+- Better setup for triggering `//` tasks
+- Efficient label and color management
+- Correct and efficient parsing directly in TypeScript
+- KanBan board instead of Todo board, supporting all GitHub KanBan features
+- More colors for better visual tracking
 
-Made for myself and my own personal use mainly. I plan on submitting it to the Workshop linking to the original Todo Board as a formal feature.
-I've got to upload it so my group can use it for our School Projects.
+---
 
-Free of Charge. Not charging anything from anyone.
+### Made For
+Created primarily for personal and group use, especially for school projects.  
+Free of charge and open for anyone to use. Plans to submit to the VSCode Workshop, linking back to the original Todo Board.
 
-### Thank You for using it!
+---
+
+### Thank You
+Thank you for using this plugin! Feedback, issues, and contributions are welcome.
+
+---
+
+<div align="center">
+<sub>Visual KanBan Board for VSCode — Forked from dantewebmaster/todo-board under MIT License</sub>
+</div>
