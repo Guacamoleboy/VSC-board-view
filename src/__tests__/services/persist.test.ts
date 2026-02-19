@@ -1,7 +1,6 @@
 import * as assert from "node:assert";
-
 import { loadPersistedTodos, mergeWithPersistedIssues, persistResults, updateTodoWithIssue } from "@/services/persist";
-import type { TodoHit } from "@/types/todo";
+import type { RawHit } from "@/types/board"; 
 
 suite("services/persist", () => {
   suite("persistResults and loadPersistedTodos", () => {
@@ -10,6 +9,7 @@ suite("services/persist", () => {
     });
 
     test("should export loadPersistedTodos function", () => {
+     
       assert.strictEqual(typeof loadPersistedTodos, "function");
     });
   });
@@ -20,7 +20,7 @@ suite("services/persist", () => {
     });
 
     test("should preserve issue data when merging TODOs", async () => {
-      const mockNewTodos: TodoHit[] = [
+      const mockNewTodos: RawHit[] = [
         {
           id: "1",
           file: "/test/file.ts",
@@ -43,7 +43,7 @@ suite("services/persist", () => {
     });
 
     test("should return new TODOs when no persisted data exists", async () => {
-      const mockNewTodos: TodoHit[] = [
+      const mockNewTodos:  RawHit[] = [
         {
           id: "1",
           file: "/test/file.ts",
@@ -59,7 +59,7 @@ suite("services/persist", () => {
     });
 
     test("should handle errors gracefully", async () => {
-      const mockNewTodos: TodoHit[] = [
+      const mockNewTodos: RawHit[] = [
         {
           id: "1",
           file: "/test/file.ts",

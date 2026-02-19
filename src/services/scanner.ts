@@ -17,14 +17,21 @@ import {
 } from "@/utils/regex-builder";
 import { sanitizeTodoExtract } from "@/utils/sanitize";
 import type { CacheData } from "@/types/cache";
-import type { ScanResult, TodoHit } from "@/types/todo";
+import { RawHit } from "@/types/board";
+
+export interface ScanResult {
+  hits: RawHit[];
+  reused: number;
+  scanned: number;
+  filesProcessed: number;
+}
 
 export async function scanWorkspace(
   progress?: vscode.Progress<{ message?: string; increment?: number }>,
   token?: vscode.CancellationToken,
   doc?: vscode.TextDocument,
 ): Promise<ScanResult> {
-  const hits: TodoHit[] = [];
+  const hits: RawHit[] = [];
   let reused = 0;
   let scanned = 0;
   let filesProcessed = 0;
@@ -49,7 +56,7 @@ export async function scanWorkspace(
     const localHits: { id: string; line: number; text: string }[] = [];
     let i = 0;
 
-    function buildCombinedFromLine(index: number): {
+      function buildCombinedFromLine(index: number): {
       text: string;
       endIndex: number;
     } {
@@ -57,6 +64,26 @@ export async function scanWorkspace(
       const idx = findFirstPatternIndex(lineText, patterns);
       const raw = lineText.substring(idx).trim();
       let combined = sanitizeTodoExtract(raw);
+
+      const isNakedTag = /^\/\/\s*[A-Z@]+\s*$/i.test(lineText.trim());
+
+      if (isNakedTag && index + 1 < doc.lineCount) {
+        const nextLineText = doc.lineAt(index + 1).text.trim();
+        if (nextLineText.startsWith('(')) {
+          const { combinedSuffix, endIndex } = collectContinuation(
+            doc,
+            index + 1,
+            matchPattern,
+            patterns,
+            maxLines,
+          );
+          
+          if (combinedSuffix.length > 0) {
+            combined = `${combined} ${combinedSuffix}`;
+          }
+          return { text: combined, endIndex };
+        }
+      }
 
       if (isHtmlBlockStartWithoutEnd(lineText)) {
         const { combinedSuffix, endIndex } = collectHtmlBlockContinuation(
@@ -130,25 +157,22 @@ export async function scanWorkspace(
 
       if (prev && prev.mtime === stat.mtime) {
         for (const h of prev.hits) {
+          // Mapper cache-hits til RawHit format
           hits.push({ id: h.id, file: key, line: h.line, text: h.text });
         }
         reused += prev.hits.length;
         return;
       }
 
-      const doc = await vscode.workspace.openTextDocument(uri);
+      const openedDoc = await vscode.workspace.openTextDocument(uri);
+      if (openedDoc.lineCount > 6000) return;
 
-      if (doc.lineCount > 6000) {
-        return;
-      }
-
-      const { localHits } = scanDocumentForTasks(doc, pattern, searchPatterns);
+      const { localHits } = scanDocumentForTasks(openedDoc, pattern, searchPatterns);
       for (const h of localHits) {
         hits.push({ id: h.id, file: key, line: h.line, text: h.text });
       }
 
       scanned += localHits.length;
-
       cache.files[key] = { mtime: stat.mtime, hits: localHits };
       updated.push(key);
     } catch {
@@ -158,27 +182,15 @@ export async function scanWorkspace(
 
   async function worker() {
     while (true) {
-      const uriIndex: number = cursor++;
-
-      if (uriIndex >= uris.length) {
-        break;
-      }
-
-      if (token?.isCancellationRequested) {
-        return;
-      }
+      const uriIndex = cursor++;
+      if (uriIndex >= uris.length || token?.isCancellationRequested) break;
 
       await processFile(uris[uriIndex]);
       filesProcessed += 1;
 
       if (progress) {
-        const progressPercentage: number = ((uriIndex + 1) / uris.length) * 100;
-        const percentageMessage = `${progressPercentage.toFixed(1)}%`;
-        const fileProgressMessage = `(${uriIndex + 1}/${uris.length})`;
-
         progress.report({
-          increment: 0,
-          message: `${percentageMessage} ${fileProgressMessage}`,
+          message: `${((uriIndex + 1) / uris.length * 100).toFixed(1)}% (${uriIndex + 1}/${uris.length})`,
         });
       }
     }
@@ -186,11 +198,7 @@ export async function scanWorkspace(
 
   await Promise.all(Array.from({ length: concurrency }, worker));
 
-  if (token?.isCancellationRequested) {
-    return { hits, reused, scanned, filesProcessed };
-  }
-
-  if (updated.length) {
+  if (updated.length && !token?.isCancellationRequested) {
     writeCache(cache).catch(() => undefined);
   }
 
@@ -204,9 +212,9 @@ export async function scanWorkspace(
  * @returns Promise that resolves when enrichment is complete
  */
 export async function enrichTodosWithGitInfo(
-  hits: TodoHit[],
-): Promise<TodoHit[]> {
-  const enrichedHits: TodoHit[] = [];
+  hits: RawHit[],
+): Promise<RawHit[]> {
+  const enrichedHits: RawHit[] = [];
   const batchSize = 10;
 
   for (let i = 0; i < hits.length; i += batchSize) {
@@ -319,20 +327,30 @@ function collectContinuation(
 
   while (j < doc.lineCount && j < maxEndIndex) {
     const nextText = doc.lineAt(j).text;
+    
     if (isTodoLine(nextText, matchPattern, patterns)) {
       break;
     }
-    if (!isLineComment(nextText)) {
-      break;
+
+    const trimmed = nextText.trim();
+    
+    if (trimmed.startsWith('(') || trimmed.startsWith('//')) {
+      parts.push(sanitizeTodoExtract(nextText));
+      j++;
+      continue;
     }
 
-    const content = sanitizeTodoExtract(extractCommentContent(nextText));
-    parts.push(content);
-    j++;
+    
+    if (trimmed.length > 0 && !hasPatternAtCommentStart(nextText, patterns)) {
+      parts.push(sanitizeTodoExtract(nextText));
+      j++;
+      continue;
+    }
+
+    break;
   }
 
-  const combinedSuffix = parts.join(REGEX.LINE_BREAK_TOKEN);
-  return { combinedSuffix, endIndex: j };
+  return { combinedSuffix: parts.join(" "), endIndex: j };
 }
 
 function stripBlockLinePrefix(text: string): string {

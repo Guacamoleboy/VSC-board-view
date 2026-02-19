@@ -351,24 +351,63 @@ export function getBoardStyles(): string {
       display: none;
     }
 
+    .card__header {
+        display: flex;
+        justify-content: space-between; 
+        align-items: center;         
+        width: 100%;                  
+        gap: 1rem;                    
+        margin-bottom: 0.25rem;  
+        opacity: 0.70 !important;         
+    }
+
     .card__header__alignment {
         display: flex;
         justify-content: space-between; 
         align-items: center;         
         width: 100%;                  
         gap: 12px;                    
-        margin-bottom: 4px;           
+        margin-bottom: 1.25rem; 
+        position: relative;     
+    }
+
+    .card__header__alignment::after {
+        content: "";
+        position: absolute;
+        bottom: -0.75rem;       
+        left: 0;
+        width: 15%;             
+        height: 2px;           
+        background-color: rgba(255, 255, 255, 0.25);
+    }
+    
+    .assignee-avatar {
+        width: 2.4em;
+        height: 2.4em;
+        flex-shrink: 0;
+        transition: transform 0.1s ease-in-out, z-index 0.1s;
+        cursor: pointer;
+    }
+
+    .assignee-avatar:hover {
+      transform: scale(1.1);
+      z-index: 100;
     }
 
     .card__priority-badge {
+        display: inline-block; 
         font-size: 10px;
         font-weight: bold;
         text-transform: uppercase;
-        padding: 2px 6px;
+        padding: 3px 6px; 
+        
         border-radius: 4px;
         background: var(--vscode-badge-background); 
         color: var(--vscode-badge-foreground);
-        white-space: nowrap;           
+        white-space: nowrap;
+        line-height: 1.2; 
+        vertical-align: middle; 
+        margin-top: -1px;
     }
 
     .card__priority-badge[data-priority="high"] {
@@ -398,11 +437,63 @@ export function getBoardStyles(): string {
       border: 1px solid #fecaca;
     }
 
+    .card__status-tag {
+      background-color: #FFF;
+      color: #4d4d4d;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1.2;
+      transition: filter 0.2s ease;
+    }
+
+    .card__status-tag--idea {
+      background-color: #f1f0ff;
+      color: #6c5ce7;
+    }
+
+    .card__status-tag--to-be-done {
+      background-color: #f5f5f5;
+      color: #636e72;
+    }
+
+    .card__status-tag--in-progress {
+      background-color: #e3f2fd;
+      color: #007acc;
+    }
+
+    .card__status-tag--in-review {
+      background-color: #fff3e0;
+      color: #e67e22;
+    }
+
+    .card__status-tag--done {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .card__status-tag:hover {
+      filter: brightness(0.95);
+    }
+
     .card__header {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
+      margin-bottom: 1rem;
+    }
+
+    .card__title {
+        margin: 0 !important;      
+        padding: 0 !important;     
+        line-height: 1.2;         
+        display: flex;         
+        align-items: center;
     }
 
     .issue-badge {
@@ -433,22 +524,23 @@ export function getBoardStyles(): string {
       word-break: break-word;
     }
 
-    .card__description::after {
-      content: "";
-      display: block;         
-      width: 20%;           
-      height: 2px;           
-      background-color: rgba(255,255,255,0.75); 
-      margin-top: 0.5rem !important;    
+    .card__meta {
+        text-decoration: none !important;
+        display: flex;
+        flex-direction: column; 
+        gap: 4px;          
+        font-size: 12px;
+        color: var(--vscode-descriptionForeground);
+        margin-bottom: 8px;   
     }
 
-    .card__meta {
-      font-size: 12px;
-      color: var(--vscode-descriptionForeground);
+    .card__meta span, 
+    .card__meta .badge {
+        align-self: flex-start; 
     }
 
     .card__meta:hover {
-      text-decoration: underline;
+      text-decoration: none !important;
       color: var(--vscode-foreground);
     }
 
@@ -457,6 +549,78 @@ export function getBoardStyles(): string {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
+    }
+
+    .header__assignees {
+        display: flex;
+        flex-direction: row; 
+        align-items: center;
+        padding-left: 10px; 
+    }
+
+    .assignee-container {
+        position: relative;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: #444;    
+        margin-left: -8px;
+        border: 2px solid #585858;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;   
+        transition: width 0.3s ease, padding 0.3s ease;
+        cursor: pointer;
+    }
+
+    .assignee-full-name {
+        display: none;
+        white-space: nowrap;
+        font-size: 10px;
+        font-weight: 700;
+        color: white;
+        padding: 0 8px;
+    }
+
+    .assignee-container:first-child {
+        margin-left: 0;
+    }
+
+    .assignee-container:hover {
+        width: auto;       
+        min-width: 32px;    
+        z-index: 100;
+        background: #555; 
+    }
+
+    .assignee-container:hover .assignee-avatar,
+    .assignee-container:hover .assignee-initial {
+        display: none !important;
+    }
+
+    .assignee-container:hover .assignee-full-name {
+        display: block;
+    }
+
+    .assignee-container:hover .assignee-full-name {
+        opacity: 1;
+    }
+
+    .assignee-container:hover .assignee-initial {
+        display: none; 
+    }
+
+    .assignee-initial {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 10px;
+        font-weight: 800;
+        color: #ffffff;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        pointer-events: none;
     }
 
     .card__labels .badge {
@@ -534,15 +698,28 @@ export function getBoardStyles(): string {
     }
 
     .badge--location {
+      display: inline-flex;
+      align-items: center;
       text-decoration: none !important;
       margin-bottom: 0.25rem !important;
-      background-color: #eec50d;
-      color: #2b2b2b;
+      margin-top: 0.5rem !important;
+      background-color: rgba(0, 0, 0, 0.1); 
+      color: #808080;                          
       padding: 0.22rem 0.6rem;
       border-radius: 0.22rem;   
       font-size: 0.82rem;        
       font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.2);  
+      transition: all 0.2s ease-in-out;      
+      cursor: pointer;
+    }
+
+    .badge--location:hover {
+      background-color: #eec50d;             
+      color: #2b2b2b;                       
+      border-color: #d3a81a;
       box-shadow: 0 2.5px 1px rgba(211, 168, 26, 0.55); 
+      transform: translateY(-1px);         
     }
 
     .empty {
@@ -778,7 +955,8 @@ export function getBoardStyles(): string {
       background: var(--vscode-button-secondaryHoverBackground);
     }
 
-    .toggle-location-button {
+    .toggle-location-button,
+    .view-btn {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -787,20 +965,35 @@ export function getBoardStyles(): string {
       border-radius: 4px;
       color: var(--vscode-foreground);
       cursor: pointer;
-      width: 32px;
       height: 32px;
-      margin-right: 8px; /* Afstand til søgefeltet */
+      padding: 0 8px;
+      margin-right: 8px;
+      font-size: 12px;
       transition: all 0.2s ease;
+      white-space: nowrap;
     }
 
-    .toggle-location-button:hover {
+    .toggle-location-button {
+      width: 32px;
+      padding: 0;
+    }
+
+    .toggle-location-button:hover,
+    .view-btn:hover {
       background-color: var(--vscode-toolbar-hoverBackground);
       border-color: var(--vscode-focusBorder);
     }
 
-    .toggle-location-button.active {
-      color: var(--vscode-button-background);
-      background-color: var(--vscode-button-secondaryHoverBackground);
+    .toggle-location-button.active,
+    .view-btn.active {
+      color: var(--vscode-button-foreground);
+      background-color: var(--vscode-button-background);
+      border-color: #e2e2e2;
+    }
+
+    .view-btn:active {
+      opacity: 0.8;
+      transform: translateY(1px);
     }
 
   `;

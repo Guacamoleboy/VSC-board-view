@@ -4,7 +4,7 @@ import { getCurrentPanel, updateBoardContent } from "@/commands/open-board";
 import { mergeWithPersistedIssues, persistResults } from "@/services/persist";
 import { enrichTodosWithGitInfo, scanWorkspace } from "@/services/scanner";
 
-export async function scanTodos(): Promise<void> {
+export async function scanTodos(context: vscode.ExtensionContext): Promise<void> {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
@@ -39,7 +39,7 @@ export async function scanTodos(): Promise<void> {
 
         const panel = getCurrentPanel();
         if (panel) {
-          await updateBoardContent(panel.webview);
+          await updateBoardContent(panel.webview, context);
         }
 
         const message =

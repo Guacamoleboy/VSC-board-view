@@ -1,82 +1,70 @@
 import * as vscode from "vscode";
+import { BoardItem, BoardGroups, RawHit } from "@/types/board";
+import { transformKanbanHit } from "./kanban-transformer";
+import { transformTodoHit } from "./todo-transformer";
+import { transformBugHit } from "./bug-transformer";
+import { parseBoardItem } from "@/domain/parsing/parser-factory";
 
-import { REGEX } from "@/constants/regex";
-import { parseTodoStatus } from "@/utils/status";
-import type { BoardItem, TodoGroups, TodoHit, TodoStatus } from "@/types/todo";
-const STATUS_LEVELS: TodoStatus[] = [
-  "idea",
-  "to be done",
-  "in progress",
-  "in review",
-  "done",
-];
 
-export function buildBoardItems(hits: TodoHit[]): BoardItem[] {
+export function groupItems(items: BoardItem[]): BoardGroups {
+  const groups: BoardGroups = {};
+
+  items.forEach(item => {
+    let column: string;
+
+    if (item.boardType === "kanban") {
+      column = (item.status || "idea").toLowerCase();
+    } else if (item.boardType === "bug") {
+      column = (item.status || "open").toLowerCase();
+    } else {
+      column = (item.priority || "low").toLowerCase();
+    }
+
+    if (!groups[column]) {
+      groups[column] = [];
+    }
+    groups[column].push(item);
+  });
+
+  return groups;
+}
+
+export function buildBoardItems(hits: RawHit[]): BoardItem[] {
   const workspaceFolders = vscode.workspace.workspaceFolders;
-
   const relativePathResolver = workspaceFolders?.length
     ? (uri: string) => vscode.workspace.asRelativePath(uri)
     : (uri: string) => uri;
 
-  return hits.map((hit) => toBoardItem(hit, relativePathResolver(hit.file)));
-}
+  const items: BoardItem[] = [];
 
-function toBoardItem(hit: TodoHit, relativePath: string): BoardItem {
-  const { status, title, description, priority, labels } = parseTodoStatus(hit.text);
-  const normalizedDescription = description.replace(
-    REGEX.LINE_BREAK_REGEX,
-    REGEX.LINE_BREAK_TOKEN,
-  );
+  console.log(`[Board Debug] Starter buildBoardItems med ${hits.length} rå hits.`);
 
-  return {
-    id: hit.id,
-    status,
-    title,  
-    priority: priority || "Low",                           
-    description: normalizedDescription,
-    filePath: hit.file,
-    relativePath,
-    line: hit.line,
-    labels,
-    lastModified: hit.lastModified,
-    daysOld: hit.daysOld,
-    issueId: hit.issueId,
-    issueKey: hit.issueKey,
-    issueLink: hit.issueLink,
-  };
+  for (const hit of hits) {
+    const relativePath = relativePathResolver(hit.file);
+    const parsed = parseBoardItem(hit.text);
+    
+    if (!parsed) {
+      console.log(`[Board Debug] Parser kunne ikke læse linje: "${hit.text}"`);
+      continue;
+    }
 
-}
+    let boardItem: BoardItem | undefined;
+    
+    if (parsed.boardType === "kanban") {
+      boardItem = transformKanbanHit(hit, relativePath);
+    } else if (parsed.boardType === "bug") {
+      boardItem = transformBugHit(hit, relativePath);
+    } else if (parsed.boardType === "todo") {
+      boardItem = transformTodoHit(hit, relativePath);
+    }
 
-function compareBoardItems(left: BoardItem, right: BoardItem): number {
-  if (left.relativePath !== right.relativePath) {
-    return left.relativePath.localeCompare(right.relativePath);
+    if (boardItem) {
+      items.push(boardItem);
+    } else {
+      console.log(`[Board Debug] Transformer fejlede for ${parsed.boardType} på linje: ${hit.line}`);
+    }
   }
 
-  if (left.line !== right.line) {
-    return left.line - right.line;
-  }
-
-  return left.title.localeCompare(right.title);
-}
-
-export function groupItems(items: BoardItem[]): TodoGroups {
-  const groups: TodoGroups = {
-    idea: [],
-    "to be done": [],
-    "in progress": [],
-    "in review": [],
-    done: [],
-  };
-
-  for (const item of items) {
-    const s = item.status ?? "idea";
-    groups[s].push(item);
-  }
-
-  for (const status of STATUS_LEVELS) {
-    groups[status].sort(compareBoardItems);
-  }
-
-  return groups;
-
+  console.log(`[Board Debug] Build færdig. Returnerer ${items.length} BoardItems.`);
+  return items;
 }

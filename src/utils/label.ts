@@ -1,8 +1,11 @@
 import { REGEX } from "@/constants/regex";
 import { iconsSvg } from "@/ui/icons";
 import type { CommonLabels } from "@/types/label";
-import type { TodoHit } from "@/types/todo";
+import { RawHit } from "@/types/board"; // Rettet import
 
+/**
+ * Udtrækker labels fra rå tekst baseret på [label1, label2] format
+ */
 function extractLabels(text: string): string[] {
   const match = text.match(REGEX.LABEL_PATTERN);
 
@@ -16,7 +19,10 @@ function extractLabels(text: string): string[] {
     .filter((label) => label.length > 0);
 }
 
-export function countLabels(hits: TodoHit[]): Map<string, number> {
+/**
+ * Tæller forekomster af labels på tværs af alle rå hits
+ */
+export function countLabels(hits: RawHit[]): Map<string, number> {
   const labelCounts = new Map<string, number>();
 
   for (const hit of hits) {
@@ -30,6 +36,9 @@ export function countLabels(hits: TodoHit[]): Map<string, number> {
   return labelCounts;
 }
 
+/**
+ * Returnerer det korrekte SVG ikon baseret på label-navn
+ */
 export function getLabelIconSvg(label: string): string {
   const iconMap: Record<CommonLabels, string> = {
     todo: iconsSvg.board,
@@ -52,7 +61,6 @@ export function getLabelIconSvg(label: string): string {
 
   const lowerLabel = label.replace(/^@/, "").toLowerCase() as CommonLabels;
 
-  // Fallback or return
   return Object.hasOwn(iconMap, lowerLabel) ? iconMap[lowerLabel] : iconsSvg.tag;
 }
 
@@ -60,7 +68,7 @@ export function getLabelColor(label: string): { background: string; text: string
   const colorMap: Record<string, { background: string; text: string }> = {
     "urgent": { background: "#DC2626", text: "#FFFFFF" },         
     "high priority": { background: "#EF4444", text: "#FFFFFF" }, 
-    "low priority": { background: "#94A3B8", text: "#FFFFFF" },  
+    "low priority": { background: "#7a94b9", text: "#FFFFFF" },  
     "bug": { background: "#DC2626", text: "#FFFFFF" },           
     "fixme": { background: "#B91C1C", text: "#FFFFFF" },       
     "wontfix": { background: "#0F172A", text: "#FFFFFF" },      
@@ -68,7 +76,7 @@ export function getLabelColor(label: string): { background: string; text: string
     "ready for review": { background: "#10B981", text: "#FFFFFF" }, 
     "staged": { background: "#059669", text: "#FFFFFF" },         
     "draft": { background: "#CBD5E1", text: "#000000" },          
-    "deprecated": { background: "#475569", text: "#FFFFFF" },     
+    "deprecated": { background: "#476950", text: "#FFFFFF" },     
     "frontend": { background: "#0EA5E9", text: "#FFFFFF" },       
     "backend": { background: "#1E40AF", text: "#FFFFFF" },        
     "api": { background: "#2563EB", text: "#FFFFFF" },            
@@ -94,17 +102,10 @@ export function getLabelColor(label: string): { background: string; text: string
   return colorMap[lowerLabel] ?? { background: "#64748B", text: "#FFFFFF" }; 
 }
 
+/**
+ * Hjælpefunktion til at udtrække labels fra tekst (returnerer undefined hvis ingen findes)
+ */
 export function extractLabelsFromText(text: string): string[] | undefined {
-  const match = text.match(REGEX.LABEL_PATTERN);
-
-  if (!match?.[1]) {
-    return undefined;
-  }
-
-  const labels = match[1]
-    .split(",")
-    .map((label) => label.trim())
-    .filter((label) => label.length > 0);
-
+  const labels = extractLabels(text);
   return labels.length > 0 ? labels : undefined;
 }

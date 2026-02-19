@@ -58,6 +58,15 @@ export function getBoardScripts(): string {
         });
     }
 
+    // Board View
+    document.querySelectorAll('.view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        vscode.postMessage({ type: 'switchView', view: btn.dataset.view });
+      });
+    });
+
     // Kebab menu: abrir/fechar e ação de criar issue
     kebabMenus.forEach((menu) => {
       const btn = menu.querySelector('.card__menu-btn');

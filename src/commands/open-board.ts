@@ -4,10 +4,7 @@ import { getAuthToken, setAuthToken } from "@/services/auth";
 import { filterState } from "@/services/filter-state";
 import { loadPersistedTodos, updateTodoWithIssue } from "@/services/persist";
 import { renderBoard } from "@/ui/board";
-import {
-  buildBoardItems,
-  groupItems,
-} from "@/ui/board/services/board-transformer";
+import { buildBoardItems, groupItems } from "@/ui/board/services/board-transformer";
 import type { FetchOptions } from "@/types/fetch";
 import type { CreateIssueResponse, IssueTypeResponse } from "@/types/issue";
 import type { ProjectResponse } from "@/types/project";
@@ -83,197 +80,142 @@ async function fetchWithTokenRefresh<T>(
   return jsonResponse as T;
 }
 
+let currentView: "kanban" | "todo" | "bug" = "kanban";
+
 export async function updateBoardContent(
   webview: vscode.Webview,
+  context: vscode.ExtensionContext,
+  view: "kanban" | "todo" | "bug" = currentView
 ): Promise<void> {
+  currentView = view;
+  
   const hits = await loadPersistedTodos();
-  const boardItems = buildBoardItems(hits);
-  const grouped = groupItems(boardItems);
+  const allBoardItems = buildBoardItems(hits);
+  
+  const filteredItems = allBoardItems.filter(item => {
+    if (view === "kanban") {
+      return item.boardType === "kanban";
+    } else if (view === "bug") {
+      return item.boardType === "bug";
+    } else {
+      return item.boardType === "todo" && (item as any).token === "TODO";
+    }
+  });
 
-  webview.html = renderBoard(webview, grouped);
+  const grouped = groupItems(filteredItems);
+  
+  const user1Path = vscode.Uri.joinPath(context.extensionUri, "resources", "users", "user1.png");
+  const user1Uri = webview.asWebviewUri(user1Path).toString();
+  
+  webview.html = renderBoard(webview, grouped, user1Uri, view);
 }
 
 export function getCurrentPanel(): vscode.WebviewPanel | undefined {
   return currentPanel;
 }
 
-function setupWebviewMessageHandler(panel: vscode.WebviewPanel): void {
+function setupWebviewMessageHandler(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
   panel.webview.onDidReceiveMessage(async (message) => {
     if (message?.type === "open" && typeof message.file === "string") {
       const line = typeof message.line === "number" ? message.line : 0;
-
       try {
         const resourceUri = vscode.Uri.file(message.file);
         const document = await vscode.workspace.openTextDocument(resourceUri);
         const position = new vscode.Position(line, 0);
         const selection = new vscode.Selection(position, position);
-
-        await vscode.window.showTextDocument(document, {
-          selection,
-          preview: false,
-        });
+        await vscode.window.showTextDocument(document, { selection, preview: false });
       } catch (error) {
-        const messageText =
-          error instanceof Error ? error.message : String(error);
-        void vscode.window.showErrorMessage(
-          `Unable to open TODO location: ${messageText}`,
-        );
+        const messageText = error instanceof Error ? error.message : String(error);
+        void vscode.window.showErrorMessage(`Unable to open TODO location: ${messageText}`);
       }
-    } else if (
-      message?.type === "setFilter" &&
-      typeof message.label === "string"
-    ) {
-      // Toggle label in filter state (supports multiple labels)
+    } 
+    
+    else if (message?.type === "switchView" && typeof message.view === "string") {
+      try {
+        await updateBoardContent(panel.webview, context, message.view as "kanban" | "todo" | "bug");
+      } catch (err) {
+        console.error("[TODO Board] Erro ao trocar de vista:", err);
+      }
+    }
+
+    else if (message?.type === "setFilter" && typeof message.label === "string") {
       filterState.toggleLabel(message.label);
-    } else if (
-      message?.type === "removeLabel" &&
-      typeof message.label === "string"
-    ) {
-      // Remove a specific label from filter
+    } 
+    else if (message?.type === "removeLabel" && typeof message.label === "string") {
       filterState.removeLabel(message.label);
-    } else if (message?.type === "clearLabels") {
+    } 
+    else if (message?.type === "clearLabels") {
       filterState.clearLabels();
-    } else if (
-      message?.type === "setAgeFilter" &&
-      typeof message.ageFilter === "string"
-    ) {
+    } 
+    else if (message?.type === "setAgeFilter" && typeof message.ageFilter === "string") {
       filterState.setAgeFilter(message.ageFilter);
-    } else if (
-      message?.type === "toggleSort" &&
-      typeof message.direction === "string"
-    ) {
+    } 
+    else if (message?.type === "toggleSort" && typeof message.direction === "string") {
       filterState.toggleSortDirection();
-    } else if (message?.type === "resetFilters") {
+    } 
+    else if (message?.type === "resetFilters") {
       filterState.clearLabels();
       filterState.setAgeFilter("all");
       filterState.setSort({ direction: "desc" });
-    } else if (message?.type === "fetchProjects") {
-      // Buscar projetos do Jira
+    } 
+
+    else if (message?.type === "fetchProjects") {
       try {
         const token = await getAuthToken();
         if (!token) {
-          panel.webview.postMessage({
-            type: "projectsLoaded",
-            projects: [],
-          });
+          panel.webview.postMessage({ type: "projectsLoaded", projects: [] });
           return;
         }
-
         const response = await fetchWithTokenRefresh<ProjectResponse[]>(
-          "https://todo-board.dantewebmaster.com.br/projects",
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          },
+          "https://todo-board.dantewebmaster.com.br",
+          { method: "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
         );
-
-        if (!response) {
-          panel.webview.postMessage({
-            type: "projectsLoaded",
-            projects: [],
-          });
-          return;
-        }
-
-        panel.webview.postMessage({
-          type: "projectsLoaded",
-          projects: response,
-        });
+        panel.webview.postMessage({ type: "projectsLoaded", projects: response || [] });
       } catch (error) {
         console.error("[TODO Board] Falha ao buscar projetos:", error);
-        panel.webview.postMessage({
-          type: "projectsLoaded",
-          projects: [],
-        });
+        panel.webview.postMessage({ type: "projectsLoaded", projects: [] });
       }
-    } else if (message?.type === "fetchIssueTypes") {
-      // Buscar tipos de issue do Jira
+    } 
+    else if (message?.type === "fetchIssueTypes") {
       try {
         const token = await getAuthToken();
         if (!token) {
-          panel.webview.postMessage({
-            type: "issueTypesLoaded",
-            issueTypes: [],
-          });
+          panel.webview.postMessage({ type: "issueTypesLoaded", issueTypes: [] });
           return;
         }
-
         const projectId = message.projectId || "";
-        const url = `https://todo-board.dantewebmaster.com.br/issue-types?projectId=${projectId}`;
-
+        const url = `https://todo-board.dantewebmaster.com.br{projectId}`;
         const response = await fetchWithTokenRefresh<IssueTypeResponse[]>(url, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
         });
-
-        if (!response) {
-          panel.webview.postMessage({
-            type: "issueTypesLoaded",
-            issueTypes: [],
-          });
-          return;
-        }
-
-        panel.webview.postMessage({
-          type: "issueTypesLoaded",
-          issueTypes: response,
-        });
+        panel.webview.postMessage({ type: "issueTypesLoaded", issueTypes: response || [] });
       } catch (error) {
         console.error("[TODO Board] Falha ao buscar tipos de issue:", error);
-        panel.webview.postMessage({
-          type: "issueTypesLoaded",
-          issueTypes: [],
-        });
+        panel.webview.postMessage({ type: "issueTypesLoaded", issueTypes: [] });
       }
-    } else if (message?.type === "createIssue") {
+    } 
+
+    // 5. CREATE JIRA ISSUE
+    else if (message?.type === "createIssue") {
       try {
         const token = await getAuthToken();
         if (!token) {
-          void vscode.window.showErrorMessage(
-            "Você precisa estar autenticado para criar uma issue.",
-          );
+          void vscode.window.showErrorMessage("Você precisa estar autenticado para criar uma issue.");
           return;
         }
 
-        // Construir descrição no formato ADF
-        const ageTextMap: Record<number, string> = {
-          0: "hoje",
-          1: "1 dia",
-        };
-
-        const ageText =
-          ageTextMap[message.daysOld] || `${message.daysOld} dias`;
-
+        const ageText = message.daysOld === 0 ? "hoje" : `${message.daysOld} dias`;
         const adfDescription = {
-          type: "doc",
-          version: 1,
-          content: [
-            {
-              type: "paragraph",
-              content: [
-                {
-                  type: "text",
-                  text: message.description || "TODO sem descrição",
-                },
-                { type: "text", text: "\n" },
-                {
-                  type: "text",
-                  text: `Adicionado no código: ${ageText}`,
-                },
-                { type: "text", text: "\n" },
-                {
-                  type: "text",
-                  text: `Arquivo: ${message.location} | Linha: ${message.line}`,
-                },
-              ],
-            },
-          ],
+          type: "doc", version: 1,
+          content: [{
+            type: "paragraph",
+            content: [
+              { type: "text", text: message.description || "TODO sem descrição" },
+              { type: "text", text: `\nAdicionado no código: ${ageText}` },
+              { type: "text", text: `\nArquivo: ${message.location} | Linha: ${message.line}` }
+            ]
+          }]
         };
 
         const payload = {
@@ -282,126 +224,67 @@ function setupWebviewMessageHandler(panel: vscode.WebviewPanel): void {
             summary: message.summary || "TODO sem descrição",
             issuetype: { id: message.issueTypeId },
             description: adfDescription,
-          },
+          }
         };
 
-        // Faz requisição com refresh automático de token
         const response = await fetchWithTokenRefresh<CreateIssueResponse>(
-          "https://todo-board.dantewebmaster.com.br/issue",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          },
+          "https://todo-board.dantewebmaster.com.br",
+          { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
         );
 
-        await updateTodoWithIssue(message.filePath, message.line, {
-          id: response.id,
-          key: response.key,
-          link: response.link,
-        });
-
-        // Envia dados da issue criada de volta ao webview
-        panel.webview.postMessage({
-          type: "issueCreated",
-          issueData: {
-            id: response.id,
-            key: response.key,
-            link: response.link,
-            location: message.location,
-            line: message.line,
-          },
-        });
-
-        void vscode.window.showInformationMessage(
-          `Issue [${response.key}] criada com sucesso!`,
-        );
+        await updateTodoWithIssue(message.filePath, message.line, { id: response.id, key: response.key, link: response.link });
+        panel.webview.postMessage({ type: "issueCreated", issueData: { id: response.id, key: response.key, link: response.link, location: message.location, line: message.line } });
+        void vscode.window.showInformationMessage(`Issue [${response.key}] criada com sucesso!`);
       } catch (err) {
-        // Loga o erro e o token para debug
-        console.error("[TODO Board] Falha ao criar issue:", err);
-        void vscode.window.showErrorMessage(
-          `Erro ao criar issue: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        void vscode.window.showErrorMessage(`Erro ao criar issue: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } else if (
-      message?.type === "openExternal" &&
-      typeof message.url === "string"
-    ) {
-      // Abrir URL externa (issue do Jira)
+    } 
+
+    // 6. EXTERNAL LINKS & AUTH CHECK
+    else if (message?.type === "openExternal" && typeof message.url === "string") {
       try {
-        const externalUri = vscode.Uri.parse(message.url);
-        await vscode.env.openExternal(externalUri);
+        await vscode.env.openExternal(vscode.Uri.parse(message.url));
       } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Erro ao abrir link: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        void vscode.window.showErrorMessage(`Erro ao abrir link: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } else if (message?.type === "checkAuthBeforeCreateIssue") {
-      // Verificar se está autenticado antes de abrir modal
-      try {
-        const token = await getAuthToken();
-
-        if (!token) {
-          // Não está autenticado, inicia fluxo de autenticação
-          void vscode.window.showInformationMessage(
-            "Você precisa se conectar ao Jira primeiro. Iniciando autenticação...",
-          );
-          await vscode.commands.executeCommand("todo-board.authenticate");
-          return;
-        }
-
-        // Está autenticado, envia mensagem para abrir modal
-        panel.webview.postMessage({
-          type: "openIssueModal",
-          data: message.data,
-        });
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Erro ao verificar autenticação: ${err instanceof Error ? err.message : String(err)}`,
-        );
+    } 
+    else if (message?.type === "checkAuthBeforeCreateIssue") {
+      const token = await getAuthToken();
+      if (!token) {
+        void vscode.window.showInformationMessage("Você precisa se conectar ao Jira primeiro. Iniciando autenticação...");
+        await vscode.commands.executeCommand("todo-board.authenticate");
+      } else {
+        panel.webview.postMessage({ type: "authChecked", isAuthenticated: true });
       }
     }
   });
 }
 
-export async function openTodoBoard(
-  context?: vscode.ExtensionContext,
-): Promise<void> {
+export async function openTodoBoard(context: vscode.ExtensionContext) {
   if (currentPanel) {
-    currentPanel.reveal(vscode.ViewColumn.Active);
-    await updateBoardContent(currentPanel.webview);
+    currentPanel.reveal(vscode.ViewColumn.One);
+    await updateBoardContent(currentPanel.webview, context);
     return;
   }
 
   const panel = vscode.window.createWebviewPanel(
     "todoBoard",
     "TODO Board",
-    vscode.ViewColumn.Active,
+    vscode.ViewColumn.One,
     {
       enableScripts: true,
-      retainContextWhenHidden: true,
-    },
+      localResourceRoots: [
+        vscode.Uri.joinPath(context.extensionUri, "out"),
+        vscode.Uri.joinPath(context.extensionUri, "resources"),
+      ],
+    }
   );
 
-  if (context) {
-    const lightIconPath = vscode.Uri.joinPath(
-      context.extensionUri,
-      "resources",
-      "activity-bar-icon.svg",
-    );
-    const darkIconPath = vscode.Uri.joinPath(
-      context.extensionUri,
-      "resources",
-      "activity-bar-icon.svg",
-    );
-    panel.iconPath = {
-      light: lightIconPath,
-      dark: darkIconPath,
-    };
-  }
+  const iconPath = vscode.Uri.joinPath(context.extensionUri, "resources", "activity-bar-icon.svg");
+  panel.iconPath = {
+    light: iconPath,
+    dark: iconPath,
+  };
 
   currentPanel = panel;
 
@@ -409,6 +292,8 @@ export async function openTodoBoard(
     currentPanel = undefined;
   });
 
-  await updateBoardContent(panel.webview);
-  setupWebviewMessageHandler(panel);
+  await updateBoardContent(panel.webview, context);
+  
+  setupWebviewMessageHandler(panel, context); 
+  
 }

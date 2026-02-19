@@ -34,7 +34,11 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onStartupFinished",
-    "onUri"
+    "onUri",
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact"
   ],
   "contributes": {
     "commands": [
@@ -79,6 +83,10 @@
       {
       "command": "todo-board.selectBadges",
       "title": "Select TODO Badges"
+      },
+      {
+      "command": "todo-board.deleteTodo",
+      "title": "Delete"
       }
     ],
     "viewsContainers": {
@@ -86,7 +94,7 @@
         {
           "id": "todo-board-sidebar",
           "title": "TODO Board",
-          "icon": "resources/activity-bar-icon.svg"
+          "icon": "resources/vsc-icon.svg"
         }
       ]
     },
@@ -96,7 +104,7 @@
           "type": "webview",
           "id": "todoBoard",
           "name": "TODO Board",
-          "icon": "resources/activity-bar-icon.svg",
+          "icon": "resources/vsc-icon.svg",
           "contextualTitle": "TODO Board"
         }
       ]

@@ -1,49 +1,48 @@
 import { readJsonFile, writeJsonFile } from "@/services/storage";
-import type { TodoHit } from "@/types/todo";
+import { RawHit } from "@/types/board";
 
 /**
  * Mescla novos TODOs escaneados com informações de issues já criadas.
  * Se um TODO já existia e tinha issue associada, mantém essas informações.
  */
 export async function mergeWithPersistedIssues(
-  newTodos: TodoHit[],
-): Promise<TodoHit[]> {
+  newHits: RawHit[],
+): Promise<RawHit[]> {
   try {
-    const persistedTodos = await loadPersistedTodos();
+    const persistedHits = await loadPersistedTodos();
 
-    // Cria um mapa de TODOs antigos por file:line para rápida consulta
-    const persistedMap = new Map<string, TodoHit>();
-    for (const todo of persistedTodos) {
-      const key = `${todo.file}:${todo.line}`;
-      persistedMap.set(key, todo);
+    // Cria um mapa de hits antigos por file:line para rápida consulta
+    const persistedMap = new Map<string, RawHit>();
+    for (const hit of persistedHits) {
+      const key = `${hit.file}:${hit.line}`;
+      persistedMap.set(key, hit);
     }
 
-    // Mescla informações de issues nos novos TODOs
-    const mergedTodos = newTodos.map((newTodo) => {
-      const key = `${newTodo.file}:${newTodo.line}`;
-      const persistedTodo = persistedMap.get(key);
+    // Mescla informações de issues nos novos hits
+    const mergedHits = newHits.map((newHit) => {
+      const key = `${newHit.file}:${newHit.line}`;
+      const persistedHit = persistedMap.get(key);
 
-      // Se o TODO já existia e tinha issue, mantém as informações
-      if (persistedTodo?.issueId) {
+      // Se o hit já existia e tinha issue, mantém as informações
+      if (persistedHit?.issueId) {
         return {
-          ...newTodo,
-          issueId: persistedTodo.issueId,
-          issueKey: persistedTodo.issueKey,
-          issueLink: persistedTodo.issueLink,
+          ...newHit,
+          issueId: persistedHit.issueId,
+          issueKey: persistedHit.issueKey,
+          issueLink: persistedHit.issueLink,
         };
       }
 
-      return newTodo;
+      return newHit;
     });
 
-    return mergedTodos;
+    return mergedHits;
   } catch {
-    // Se houver erro ao carregar TODOs antigos, retorna os novos sem merge
-    return newTodos;
+    return newHits;
   }
 }
 
-export async function persistResults(results: TodoHit[]): Promise<void> {
+export async function persistResults(results: RawHit[]): Promise<void> {
   try {
     await writeJsonFile("todos.json", results);
   } catch {
@@ -51,7 +50,7 @@ export async function persistResults(results: TodoHit[]): Promise<void> {
   }
 }
 
-export async function loadPersistedTodos(): Promise<TodoHit[]> {
+export async function loadPersistedTodos(): Promise<RawHit[]> {
   try {
     const parsed = await readJsonFile<unknown>("todos.json");
 
@@ -59,23 +58,23 @@ export async function loadPersistedTodos(): Promise<TodoHit[]> {
       return [];
     }
 
-    return parsed.filter(isValidTodoHit).map((todo) => {
+    return parsed.filter(isValidRawHit).map((hit) => {
       // Convert lastModified string back to Date object if present
-      if (todo.lastModified && typeof todo.lastModified === "string") {
+      if (hit.lastModified && typeof hit.lastModified === "string") {
         return {
-          ...todo,
-          lastModified: new Date(todo.lastModified),
+          ...hit,
+          lastModified: new Date(hit.lastModified),
         };
       }
 
-      return todo;
+      return hit;
     });
   } catch {
     return [];
   }
 }
 
-function isValidTodoHit(value: unknown): value is TodoHit {
+function isValidRawHit(value: unknown): value is RawHit {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -96,21 +95,21 @@ export async function updateTodoWithIssue(
   issueData: { id: string; key: string; link: string },
 ): Promise<void> {
   try {
-    const todos = await loadPersistedTodos();
+    const hits = await loadPersistedTodos();
 
-    const updatedTodos = todos.map((todo) => {
-      if (todo.file === filePath && todo.line === line) {
+    const updatedHits = hits.map((hit) => {
+      if (hit.file === filePath && hit.line === line) {
         return {
-          ...todo,
+          ...hit,
           issueId: issueData.id,
           issueKey: issueData.key,
           issueLink: issueData.link,
         };
       }
-      return todo;
+      return hit;
     });
 
-    await persistResults(updatedTodos);
+    await persistResults(updatedHits);
   } catch (error) {
     console.error("[updateTodoWithIssue] Erro:", error);
   }

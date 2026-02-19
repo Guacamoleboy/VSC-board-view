@@ -10,23 +10,22 @@ import { initializeStorage } from "@/services/storage";
 import { initializeTodoDecorator } from "@/services/todo-decorator";
 import { registerTodoSidebar } from "@/ui/sidebar";
 import { scanTodosBackground } from "@/commands/scan-todos-background";
-import { spawnStructuredComment, DEFAULT_STATUS_MAP } from "@/utils/status";
+import { parseBoardItem } from "@/domain/parsing/parser-factory";
+import { spawnStructuredCommentForKanban, KanbanParser } from "@/domain/parsing/kanban-parser";
+import { spawnStructuredCommentForTodo, TodoParser } from "@/domain/parsing/todo-parser";
+import { spawnStructuredCommentForBug, BugParser } from "@/domain/parsing/bug-parser";
 import debounce from "lodash.debounce";
 
+// active class
 export function activate(context: vscode.ExtensionContext) {
   console.log('TODO Board extension activated');
 
-  // Initialize storage service
   initializeStorage(context);
-
-  // Initialize secret-backed auth storage
   initializeAuth(context);
-
-  // Initialize TODO comment highlighting
   initializeTodoDecorator(context);
 
   const debouncedBackgroundScan = debounce((doc: vscode.TextDocument) => {
-    scanTodosBackground(doc);
+    scanTodosBackground(context, doc); 
   }, 300);
 
   context.subscriptions.push(
@@ -35,24 +34,30 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  const selectStatusCmd = vscode.commands.registerCommand(
+    const selectStatusCmd = vscode.commands.registerCommand(
     "todo-board.selectStatus",
     async (lineNum: number) => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) return;
 
-      const statuses = ["idea", "to be done", "in progress", "in review", "done"];
-      const selection = await vscode.window.showQuickPick(statuses, {
-        placeHolder: "Choose status",
+      const tagLine = editor.document.lineAt(lineNum - 1).text.toUpperCase();
+      const isBug = tagLine.includes("BUG");
+      const kanbanStatuses = ["idea", "to be done", "in progress", "in review", "done"];
+      const bugStatuses = ["open", "fixing", "fixed"];
+      const options = isBug ? bugStatuses : kanbanStatuses;
+
+      const selection = await vscode.window.showQuickPick(options, {
+        placeHolder: `Choose ${isBug ? "Bug" : "Kanban"} status`,
       });
 
       if (selection) {
         await editor.edit((editBuilder) => {
           const line = editor.document.lineAt(lineNum);
           const updatedText = line.text.replace(
-            /^(\s*\/\/.*?\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/,
+            /^(\s*\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/,
             `$1(${selection})`
           );
+          
           editBuilder.replace(line.range, updatedText);
         });
       }
@@ -106,100 +111,184 @@ export function activate(context: vscode.ExtensionContext) {
 
   );
 
-  const selectPriorityCmd = vscode.commands.registerCommand(
-    "todo-board.selectPriority",
+    const selectPriorityCmd = vscode.commands.registerCommand(
+      "todo-board.selectPriority",
+      async (lineNum: number) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        const priorities = ["Low", "Medium", "High", "Urgent", "Critical"];
+        const selection = await vscode.window.showQuickPick(priorities, {
+          placeHolder: "Set priority",
+        });
+
+        if (selection) {
+          await editor.edit((editBuilder) => {
+            const line = editor.document.lineAt(lineNum);
+            const tagLine = editor.document.lineAt(lineNum - 1).text.toUpperCase();
+            
+            const isKanban = tagLine.includes("KANBAN");
+
+            let regex: RegExp;
+            if (isKanban) {
+              regex = /^(\s*\([^)]*\)\s*\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/;
+            } else {
+              regex = /^(\s*\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/;
+            }
+
+            const updatedText = line.text.replace(regex, `$1(${selection})`);
+            editBuilder.replace(line.range, updatedText);
+          });
+        }
+      }
+    );
+
+  const deleteTodoCmd = vscode.commands.registerCommand(
+    "todo-board.deleteTodo",
     async (lineNum: number) => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) return;
 
-      const priorities = ["Low", "Medium", "High", "Urgent", "Critical"];
-      const selection = await vscode.window.showQuickPick(priorities, {
-        placeHolder: "Set task priority",
-      });
+      const line = editor.document.lineAt(lineNum);
+      const nextLine = lineNum + 1 < editor.document.lineCount 
+        ? editor.document.lineAt(lineNum + 1) 
+        : null;
 
-      if (selection) {
-        await editor.edit((editBuilder) => {
-          const line = editor.document.lineAt(lineNum);
-          const updatedText = line.text.replace(
-            /^(\s*\/\/.*?\([^)]*\)\s*\([^)]*\)\s*\([^)]*\)\s*)\([^)]*\)/,
-            `$1(${selection})`
-          );
-          editBuilder.replace(line.range, updatedText);
-        });
-      }
+      await editor.edit((editBuilder) => {
+        editBuilder.delete(line.rangeIncludingLineBreak);
+        if (nextLine && nextLine.text.trim().startsWith('(')) {
+          editBuilder.delete(nextLine.rangeIncludingLineBreak);
+        }
+      });
+      vscode.window.setStatusBarMessage("TODO deleted", 2000);
     }
   );
 
-  const codeLensProvider = vscode.languages.registerCodeLensProvider({ scheme: 'file' }, {
+    const codeLensProvider = vscode.languages.registerCodeLensProvider({ scheme: 'file' }, {
     provideCodeLenses(document) {
       const lenses: vscode.CodeLens[] = [];
-      const tags = Object.keys(DEFAULT_STATUS_MAP);
+      const kanban = new KanbanParser();
+      const todo = new TodoParser();
+      const bug = new BugParser();
 
       for (let i = 0; i < document.lineCount; i++) {
         const line = document.lineAt(i);
-        if (tags.some(tag => line.text.includes(tag)) && line.text.includes('(')) {
-          const range = new vscode.Range(i, 0, i, 0);
-          
-          lenses.push(new vscode.CodeLens(range, {
-            title: "$(list-selection)  Set status",
-            command: "todo-board.selectStatus",
-            arguments: [i]
-          }));
+        const text = line.text;
+        
+        const kanbanMatch = text.match(/\/\/\s*(@?KANBAN)/i);
+        const todoMatch = text.match(/\/\/\s*(@?TODO)/i);
+        const bugMatch = text.match(/\/\/\s*(@?BUG)/i);
+        
+        if (!kanbanMatch && !todoMatch && !bugMatch) continue;
+        let contentLineNum = i;
+        let hasParens = text.includes('(');
 
-          lenses.push(new vscode.CodeLens(range, {
-            title: "$(graph)  Set Priority",
-            command: "todo-board.selectPriority",
-            arguments: [i]
-          }));
+        if (!hasParens && i + 1 < document.lineCount) {
+          const nextLine = document.lineAt(i + 1);
+          if (nextLine.text.includes('(')) {
+            contentLineNum = i + 1;
+            hasParens = true;
+          }
+        }
 
-          lenses.push(new vscode.CodeLens(range, {
-            title: "$(tag)  Choose badges",
-            command: "todo-board.selectBadges",
-            arguments: [i]
-          }));
+        if (!hasParens) continue;
+
+        const range = new vscode.Range(i, 0, i, 0);
+
+        const deleteLens = new vscode.CodeLens(range, { 
+          title: "$(trash)  Delete", 
+          command: "todo-board.deleteTodo", 
+          arguments: [i] 
+        });
+
+        // KANBAN
+        if (kanbanMatch && kanban.supports(kanbanMatch[1].toUpperCase())) {
+          lenses.push(
+            new vscode.CodeLens(range, { title: "$(list-selection)  Set status", command: "todo-board.selectStatus", arguments: [contentLineNum] }),
+            new vscode.CodeLens(range, { title: "$(graph)  Set Priority", command: "todo-board.selectPriority", arguments: [contentLineNum] }),
+            new vscode.CodeLens(range, { title: "$(tag)  Choose badges", command: "todo-board.selectBadges", arguments: [contentLineNum] }),
+            deleteLens
+          );
+        }
+        // BUG
+        else if (bugMatch && bug.supports(bugMatch[1].toUpperCase())) {
+          lenses.push(
+            new vscode.CodeLens(range, { title: "$(list-selection)  Set status", command: "todo-board.selectStatus", arguments: [contentLineNum] }),
+            new vscode.CodeLens(range, { title: "$(tag)  Choose badges", command: "todo-board.selectBadges", arguments: [contentLineNum] }),
+            deleteLens
+          );
+        }
+        // TODO
+        else if (todoMatch && todo.supports(todoMatch[1].toUpperCase())) {
+          lenses.push(
+            new vscode.CodeLens(range, { 
+              title: "$(graph)  Set Priority", 
+              command: "todo-board.selectPriority", 
+              arguments: [contentLineNum] 
+            }),
+            new vscode.CodeLens(range, { 
+              title: "$(tag)  Choose badges", 
+              command: "todo-board.selectBadges", 
+              arguments: [contentLineNum] 
+            })
+          );
         }
       }
       return lenses;
     }
   });
 
-  // () () () [] spawner
+  // () () () () [] spawner
   const structuredCommentListener = vscode.workspace.onDidChangeTextDocument(event => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || event.contentChanges.length === 0) return;
 
     const change = event.contentChanges[0];
-    
-    if (change.text === "" && change.rangeLength > 0) {
-      return;
-    }
+    if (change.text === "" && change.rangeLength > 0) return;
 
     const lineNum = change.range.start.line;
     const line = editor.document.lineAt(lineNum);
     const text = line.text;
-    const tags = Object.keys(DEFAULT_STATUS_MAP);
-    const match = tags.find(tag => {
-      const regex = new RegExp(`\\b${tag}$`); 
-      return regex.test(text.trim());
-    });
 
-    if (match) {
-      const tagIndex = line.text.lastIndexOf(match);
+    if (text.includes('(')) return;
+
+    if (lineNum + 1 < editor.document.lineCount) {
+      const nextLineText = editor.document.lineAt(lineNum + 1).text;
+      if (nextLineText.trim().startsWith('(')) {
+        return; 
+      }
+    }
+
+    const parsed = parseBoardItem(text);
+    if (!parsed) return;
+
+    let replacementText = "";
+    if (parsed.boardType === "kanban") {
+      replacementText = spawnStructuredCommentForKanban(parsed.token || "KANBAN");
+    } else if (parsed.boardType === "todo") {
+      replacementText = spawnStructuredCommentForTodo(parsed.token || "TODO");
+    } else if (parsed.boardType === "bug") {
+      replacementText = spawnStructuredCommentForBug(parsed.token || "BUG");
+    }
+
+    if (!replacementText) return;
+
+    const tokenIndex = line.text.indexOf(parsed.token || "");
+    if (tokenIndex >= 0) {
       const rangeToReplace = new vscode.Range(
-        lineNum, tagIndex, 
-        lineNum, tagIndex + match.length
+        lineNum, tokenIndex,
+        lineNum, line.text.length
       );
 
       editor.edit(editBuilder => {
-        editBuilder.replace(rangeToReplace, spawnStructuredComment(match));
+        editBuilder.replace(rangeToReplace, replacementText);
       }, { undoStopBefore: false, undoStopAfter: false });
     }
-
   });
 
   const scanCmd = vscode.commands.registerCommand(
     "todo-board.scanTodos",
-    scanTodos,
+    () => scanTodos(context), 
   );
 
   const openBoardCmd = vscode.commands.registerCommand(
@@ -257,7 +346,6 @@ export function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // Register URI handler to receive token via vscode:// callback
   const uriHandlerDisposable = vscode.window.registerUriHandler({
     handleUri: async (uri: vscode.Uri) => {
       try {
@@ -300,13 +388,11 @@ export function activate(context: vscode.ExtensionContext) {
   const { disposable: sidebarView, provider: sidebarProvider } =
     registerTodoSidebar(context);
 
-  // Refresh button calls scanTodos (full scan)
   const refreshSidebarCmd = vscode.commands.registerCommand(
     "todo-board.refreshSidebar",
     scanTodos,
   );
 
-  // Update sidebar after scan (just updates the webview)
   const updateSidebarCmd = vscode.commands.registerCommand(
     "todo-board.updateSidebar",
     () => {
@@ -332,6 +418,7 @@ export function activate(context: vscode.ExtensionContext) {
     selectStatusCmd,
     selectBadgesCmd,
     selectPriorityCmd,
+    deleteTodoCmd,
   );
 }
 

@@ -1,8 +1,7 @@
 import * as assert from "node:assert";
-
 import { filterAndSortTodos, filterTodos, sortTodos } from "@/utils/filter-sort";
 import type { FilterOptions, SortOptions } from "@/types/filter";
-import type { BoardItem } from "@/types/todo";
+import type { BoardItem } from "@/types/board";
 
 suite("utils/filter-sort", () => {
   const createMockBoardItem = (
@@ -11,7 +10,9 @@ suite("utils/filter-sort", () => {
     daysOld?: number,
     lastModified?: Date,
     priority: string = "Low",
+    assignees: string[] = ["user1"]
   ): BoardItem => ({
+    boardType: "kanban", 
     id,
     filePath: `/test/file-${id}.ts`,
     relativePath: `file-${id}.ts`,
@@ -23,6 +24,7 @@ suite("utils/filter-sort", () => {
     labels,
     daysOld,
     lastModified,
+    assignees,
   });
 
   suite("filterTodos", () => {
